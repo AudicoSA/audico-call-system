@@ -11,7 +11,9 @@ const router = express.Router();
 
 // Get base URL for webhooks
 const getBaseUrl = (req) => {
-  return `${req.protocol}://${req.get('host')}`;
+  // Railway/Vercel/other proxies set x-forwarded-proto header
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'https';
+  return `${protocol}://${req.get('host')}`;
 };
 
 /**

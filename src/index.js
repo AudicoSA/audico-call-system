@@ -20,6 +20,9 @@ try {
 
 const app = express();
 
+// Trust proxy - Railway/Vercel run behind reverse proxies
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
