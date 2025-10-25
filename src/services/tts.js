@@ -10,7 +10,8 @@ export class TTSService {
   constructor() {
     this.apiKey = config.elevenlabs.apiKey;
     this.voiceId = config.elevenlabs.voiceId;
-    this.model = config.elevenlabs.model;
+    // Use turbo model for low latency in live calls
+    this.model = 'eleven_turbo_v2_5'; // Much faster than eleven_multilingual_v2
     this.baseUrl = 'https://api.elevenlabs.io/v1';
   }
 
@@ -58,11 +59,13 @@ export class TTSService {
           text: text,
           model_id: model,
           voice_settings: {
-            stability: options.stability || 0.5,
-            similarity_boost: options.similarity_boost || 0.75,
+            stability: options.stability || 0.4, // Lower for faster generation
+            similarity_boost: options.similarity_boost || 0.6, // Lower for speed
             style: options.style || 0.0,
-            use_speaker_boost: options.use_speaker_boost || true,
+            use_speaker_boost: options.use_speaker_boost || false, // Disable for speed
           },
+          // Optimize for low latency
+          optimize_streaming_latency: 3, // Max optimization (0-4 scale)
         },
         responseType: 'arraybuffer',
       });

@@ -39,9 +39,9 @@ router.post('/incoming', async (req, res) => {
 
     const baseUrl = getBaseUrl(req);
 
-    // Generate audio for greeting with ElevenLabs
+    // Try ElevenLabs with pre-cached greeting (instant playback)
     const greetingText = config.recording.enabled
-      ? `${config.recording.consentMessage} Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.`
+      ? 'This call will be recorded for quality and training purposes. Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.'
       : 'Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.';
 
     const audioUrl = await prepareAudioUrl(
@@ -51,14 +51,19 @@ router.post('/incoming', async (req, res) => {
       baseUrl
     );
 
-    // Create TwiML with audio playback
-    const twiml = telephonyService.createGreetingResponseWithAudio(baseUrl, audioUrl);
+    if (audioUrl) {
+      // Use ElevenLabs audio (pre-cached, instant)
+      const twiml = telephonyService.createGreetingResponseWithAudio(baseUrl, audioUrl);
+      res.type('text/xml');
+      return res.send(twiml);
+    }
 
+    // Fallback to Twilio TTS if generation failed
+    const twiml = telephonyService.createGreetingResponse(baseUrl);
     res.type('text/xml');
     res.send(twiml);
   } catch (error) {
     console.error('[Voice] Error handling incoming call:', error);
-    // Fallback to Twilio TTS if ElevenLabs fails
     const baseUrl = getBaseUrl(req);
     const twiml = telephonyService.createGreetingResponse(baseUrl);
     res.type('text/xml');
@@ -149,24 +154,29 @@ router.post('/ivr-menu', async (req, res) => {
     const callSid = req.body.CallSid;
     const baseUrl = getBaseUrl(req);
 
-    // Generate ElevenLabs audio for IVR menu
+    // Try ElevenLabs with pre-cached menu (instant playback)
     const menuText = 'Welcome to Audico how may I direct your call - press 1 for sales, 2 for shipping, 3 for technical support and 4 for accounts.';
 
     const audioUrl = await prepareAudioUrl(
       menuText,
       callSid,
-      'ivr-menu.mp3',
+      'menu.mp3',
       baseUrl
     );
 
-    // Create TwiML with audio
-    const twiml = telephonyService.createIVRMenuWithAudio(baseUrl, audioUrl);
+    if (audioUrl) {
+      // Use ElevenLabs audio (pre-cached, instant)
+      const twiml = telephonyService.createIVRMenuWithAudio(baseUrl, audioUrl);
+      res.type('text/xml');
+      return res.send(twiml);
+    }
 
+    // Fallback to Twilio TTS
+    const twiml = telephonyService.createIVRMenu(baseUrl);
     res.type('text/xml');
     res.send(twiml);
   } catch (error) {
     console.error('[Voice] Error showing IVR menu:', error);
-    // Fallback to Twilio TTS
     const baseUrl = getBaseUrl(req);
     const twiml = telephonyService.createIVRMenu(baseUrl);
     res.type('text/xml');
