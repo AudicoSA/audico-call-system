@@ -90,6 +90,28 @@ router.post('/process-input', async (req, res) => {
       return res.send(twiml);
     }
 
+    // Check explicitly for "menu" or "options" keywords BEFORE LLM analysis
+    const lowerInput = speechResult.toLowerCase();
+    if (lowerInput.includes('menu') || lowerInput.includes('options')) {
+      console.log('[Voice] Menu keyword detected, showing IVR menu');
+      const baseUrl = getBaseUrl(req);
+
+      // Try ElevenLabs with pre-cached menu audio
+      const menuText = 'Welcome to Audico how may I direct your call - press 1 for sales, 2 for shipping, 3 for technical support and 4 for accounts.';
+      const audioUrl = await prepareAudioUrl(menuText, callSid, 'menu.mp3', baseUrl);
+
+      if (audioUrl) {
+        const twiml = telephonyService.createIVRMenuWithAudio(baseUrl, audioUrl);
+        res.type('text/xml');
+        return res.send(twiml);
+      }
+
+      // Fallback to Twilio TTS
+      const twiml = telephonyService.createIVRMenu(baseUrl);
+      res.type('text/xml');
+      return res.send(twiml);
+    }
+
     // Analyze intent from speech
     const intentAnalysis = await ivrService.analyzeIntent(callSid, speechResult);
 

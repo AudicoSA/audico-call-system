@@ -14,6 +14,7 @@ const audioCache = new Map();
 // Pre-cache common phrases for instant playback
 const COMMON_PHRASES = {
   'greeting': 'This call will be recorded for quality and training purposes. Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.',
+  'greeting_short': 'Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.',
   'menu': 'Welcome to Audico how may I direct your call - press 1 for sales, 2 for shipping, 3 for technical support and 4 for accounts.',
   'sales_intro': "I'll be happy to help you with your sales inquiry.",
   'shipping_intro': "Let me help you with your shipping question.",
@@ -135,7 +136,7 @@ export async function prepareAudioUrl(text, callSid, filename, baseUrl, options 
     console.log(`[Audio] Generating audio on-demand for: ${filename}`);
 
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Audio generation timeout (3s)')), 3000)
+      setTimeout(() => reject(new Error('Audio generation timeout (8s)')), 8000)
     );
 
     const audioPromise = generateAndCacheAudio(text, callSid, filename, options);
