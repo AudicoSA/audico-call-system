@@ -144,16 +144,33 @@ router.post('/process-input', async (req, res) => {
  * POST /voice/ivr-menu
  * Show IVR menu
  */
-router.post('/ivr-menu', (req, res) => {
+router.post('/ivr-menu', async (req, res) => {
   try {
+    const callSid = req.body.CallSid;
     const baseUrl = getBaseUrl(req);
-    const twiml = telephonyService.createIVRMenu(baseUrl);
+
+    // Generate ElevenLabs audio for IVR menu
+    const menuText = 'Welcome to Audico how may I direct your call - press 1 for sales, 2 for shipping, 3 for technical support and 4 for accounts.';
+
+    const audioUrl = await prepareAudioUrl(
+      menuText,
+      callSid,
+      'ivr-menu.mp3',
+      baseUrl
+    );
+
+    // Create TwiML with audio
+    const twiml = telephonyService.createIVRMenuWithAudio(baseUrl, audioUrl);
 
     res.type('text/xml');
     res.send(twiml);
   } catch (error) {
     console.error('[Voice] Error showing IVR menu:', error);
-    res.status(500).send('Error showing menu');
+    // Fallback to Twilio TTS
+    const baseUrl = getBaseUrl(req);
+    const twiml = telephonyService.createIVRMenu(baseUrl);
+    res.type('text/xml');
+    res.send(twiml);
   }
 });
 

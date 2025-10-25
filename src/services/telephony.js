@@ -94,7 +94,35 @@ export class TelephonyService {
   }
 
   /**
-   * Create TwiML response for IVR menu
+   * Create TwiML response for IVR menu with ElevenLabs audio
+   * @param {string} baseUrl - Base URL for callbacks
+   * @param {string} audioUrl - URL to ElevenLabs audio file
+   * @returns {string} - TwiML XML
+   */
+  createIVRMenuWithAudio(baseUrl, audioUrl) {
+    const twiml = new VoiceResponse();
+
+    // Play ElevenLabs audio
+    if (audioUrl) {
+      twiml.play(audioUrl);
+    }
+
+    twiml.gather({
+      input: 'dtmf speech',
+      action: `${baseUrl}/voice/ivr-selection`,
+      method: 'POST',
+      numDigits: 1,
+      timeout: 5,
+    });
+
+    // Repeat menu if no input
+    twiml.redirect(`${baseUrl}/voice/ivr-menu`);
+
+    return twiml.toString();
+  }
+
+  /**
+   * Create TwiML response for IVR menu (fallback with Twilio TTS)
    * @param {string} baseUrl - Base URL for callbacks
    * @returns {string} - TwiML XML
    */
@@ -108,7 +136,7 @@ export class TelephonyService {
       language: 'en-ZA',
     }, menuText);
 
-    const gather = twiml.gather({
+    twiml.gather({
       input: 'dtmf speech',
       action: `${baseUrl}/voice/ivr-selection`,
       method: 'POST',

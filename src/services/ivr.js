@@ -175,17 +175,15 @@ export class IVRService {
   async canAIHandle(callSid, department) {
     const state = this.getCallState(callSid);
 
-    // AI can handle most routine inquiries
-    // Complex cases or explicit human requests go to human agents
-    if (department === 'Operator') {
-      return false; // Always route to human
+    // AI handles ALL departments (Sales, Shipping, Support, Accounts)
+    // Only transfer to human if explicitly requested or after AI fails
+
+    // If customer already tried AI multiple times, escalate
+    if (state.transferAttempts > 2) {
+      return false; // After 3 AI attempts, go to human
     }
 
-    if (state.transferAttempts > 0) {
-      return false; // If already tried AI, go to human
-    }
-
-    // For now, let AI try first for all departments except Operator
+    // AI tries first for ALL departments (including Operator)
     return true;
   }
 
