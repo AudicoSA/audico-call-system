@@ -1,0 +1,118 @@
+╔═══════════════════════════════════════════════════════════════════╗
+║          AUDICO CALL SYSTEM - QUICK START GUIDE                   ║
+║                 AI Voice Agent with Product Knowledge              ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+📋 PREREQUISITES (Already Done ✓)
+  ✓ Supabase SQL setup complete
+  ✓ Embeddings generated
+  ✓ All API keys configured
+
+═══════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: START SERVER
+
+  Open Terminal 1:
+
+  npm start
+
+  ✅ Wait for: "Ready to accept calls!"
+
+═══════════════════════════════════════════════════════════════════
+
+🌐 STEP 2: START NGROK
+
+  Open Terminal 2 (NEW WINDOW):
+
+  ngrok http 3000
+
+  📋 Copy the HTTPS URL (e.g., https://abc123.ngrok-free.app)
+
+═══════════════════════════════════════════════════════════════════
+
+⚙️  STEP 3: CONFIGURE TWILIO WEBHOOKS
+
+  Go to: https://console.twilio.com/us1/develop/phone-numbers/manage/incoming
+
+  Click: +1 620 529 1708
+
+  Set:
+    A call comes in:     https://YOUR_NGROK_URL/voice/incoming  [POST]
+    Status Callback:     https://YOUR_NGROK_URL/voice/status    [POST]
+
+  Click: Save
+
+═══════════════════════════════════════════════════════════════════
+
+📞 STEP 4: TEST CALL
+
+  Call from your phone: +1 620 529 1708
+
+  Say: "Tell me about your Sony TV"
+
+  🎤 AI will respond with product info in South African voice!
+
+═══════════════════════════════════════════════════════════════════
+
+🧪 TEST QUERIES
+
+  "Tell me about your Sony TV"
+  "Do you have the iPhone 15?"
+  "What headphones are available?"
+  "Is the Samsung 65-inch QLED in stock?"
+
+═══════════════════════════════════════════════════════════════════
+
+📊 MONITOR
+
+  Health:      http://localhost:3000/health
+  Analytics:   http://localhost:3000/analytics/dashboard
+  Ngrok Logs:  http://127.0.0.1:4040
+
+═══════════════════════════════════════════════════════════════════
+
+🐛 TROUBLESHOOTING
+
+  Problem: Call doesn't connect
+  ✓ Check both terminals are running
+  ✓ Verify Twilio webhook URLs
+  ✓ No trailing slash in ngrok URL
+
+  Problem: No response
+  ✓ Check server logs for errors
+  ✓ Verify Supabase connection
+  ✓ Test: node scripts/test-services.js
+
+═══════════════════════════════════════════════════════════════════
+
+🔄 TO RESTART
+
+  1. Ctrl+C in both terminals
+  2. npm start
+  3. ngrok http 3000
+  4. Update Twilio with NEW ngrok URL (it changes!)
+  5. Test call again
+
+═══════════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION
+
+  START_SYSTEM.md     - Detailed step-by-step guide
+  READY_TO_GO.md      - Complete setup information
+  IMPORTANT_README.md - Safety info (products table)
+
+═══════════════════════════════════════════════════════════════════
+
+✨ YOUR SYSTEM
+
+  Phone Number:    +1 620 529 1708
+  Voice:           South African (ElevenLabs)
+  AI Brain:        Claude 3.5 Sonnet
+  Speech-to-Text:  OpenAI Whisper
+  Product DB:      Supabase (5 sample products)
+
+  Safe: Uses call_center_products (NOT your quoting products table)
+
+═══════════════════════════════════════════════════════════════════
+
+Ready? Run the commands above and call +1 620 529 1708! 📞

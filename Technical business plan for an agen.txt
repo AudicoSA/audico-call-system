@@ -1,0 +1,330 @@
+Technical business plan for an agentic call‑centre agent with South‑African voice and multi‑option IVR
+1 Overview and goals
+
+Kenny’s objective is to offer customers a single telephone number in South Africa that is answered by an AI agent with a believable South‑African voice. The agent must greet callers, identify the reason for the call (sales, shipping, support, accounts, etc.), and then either complete the request autonomously or transfer the caller to the appropriate sub‑agent or human agent. It must capture caller details, update the CRM and log, and send a human‑readable summary to human agents (HITL) for edge cases. This plan surveys commercial and open‑source tools and proposes a high‑level architecture to build the solution immediately.
+
+2 Requirements and considerations
+Requirement	Implications
+Local telephone numbers	The solution must provide a South‑African phone number (e.g., geographic numbers such as 021/011, national 087 numbers or toll‑free 0800). Providers like Voiso offer local, national, mobile and toll‑free numbers and note that local numbers help establish local presence
+voiso.com
+. Twilio also supports inbound and outbound calls within South Africa and provides SIP trunking and BYOC (bring‑your‑own‑carrier) support
+twilio.com
+.
+Human‑like South‑African voice	To build customer trust, the agent should speak with a South‑African accent. Local TTS platforms such as Narakeet provide neural South‑African voices (Aletta, Piet, Charlize, etc.) designed to sound natural and cost‑effective
+narakeet.com
+narakeet.com
+. Qfrency offers high‑quality South‑African voices supporting multiple languages; benefits include improved customer understanding and satisfaction
+inclusivesolutions.co.za
+. When building custom voices, ElevenLabs’ African‑accent TTS allows tone and emotional control and includes natural pauses and contextual awareness
+elevenlabs.io
+.
+Flexible IVR and routing	The platform must route calls based on caller intent. Twilio Flex’s Studio tool lets businesses create drag‑and‑drop IVR flows for call forwarding, auto‑responders and WhatsApp menus
+business.com
+. Genesys Cloud AI offers predictive routing that automatically matches customers with the best agent based on target KPIs
+genesys.com
+. Google CCAI uses Dialogflow to build visual IVR with automated call distribution and AI‑based routing
+getvoip.com
+.
+Advanced voice agent	Modern voice platforms should support large‑language‑model integration, tool calling, knowledge‑base look‑ups, multi‑lingual support and real‑time transcription. Vapi.ai’s API‑native voice platform allows developers to bring their own transcription, LLM and TTS models, supports multilingual conversations in 100+ languages, exposes everything via API, provides automated testing, tool‑calling, A/B experiments and 99.99 % uptime
+vapi.ai
+. The open‑source Pipecat framework connects to multiple STT providers, LLMs (Anthropic, OpenAI, Mistral etc.), TTS providers (ElevenLabs, AWS, Azure, PlayHT, etc.) and telephony serialisers (Twilio, Plivo, Telnyx). It includes a CLI, debugging tools and support for structured conversation flows
+github.com
+.
+Omnichannel and agent assist	Because customers may transition between voice, WhatsApp/SMS, email and chat, the platform should be omnichannel. Twilio Flex offers a unified interface for voice, SMS, WhatsApp, chat and social channels
+business.com
+. Google CCAI integrates voice, SMS and chat channels and includes an Agent Assist module with live transcription, knowledge assist, smart reply and post‑call summarisation
+getvoip.com
+. Amazon Connect’s generative‑AI update adds agent coaching, generative summaries, generative segmentation and analytics to identify training needs
+cxtoday.com
+.
+Integration with existing systems	The agent must update the existing CRM (e.g., Salesforce, Zoho, HubSpot) and perform actions such as creating orders, updating shipment statuses and collecting payments. Voiso integrates with major CRMs and emphasises improved answer rates for outbound calls via local caller ID, call‑statistics dashboards and remote work support
+voiso.com
+. Vapi.ai lists built‑in connectors for OpenAI, Anthropic, ElevenLabs, Deepgram, Google Calendar, Salesforce, HubSpot, Genesys and Avaya
+vapi.ai
+. Pipecat offers connectors to OpenTelemetry and Sentry for analytics
+github.com
+.
+Compliance and data privacy (POPIA)	South African law requires organisations to process personal information lawfully and transparently. Consent to record calls must be obtained and stored; direct marketing requires explicit opt‑in and recording of the consent; data subjects have the right to access, correct and request deletion of their data, and calls must be stored securely with proper retention policies. Compliance frameworks (CallCabinet POPIA‑compliant recording, for example) encrypt calls and provide audit trails. Implement role‑based access control, retention policies and data subject request workflows.
+3 Telephony and phone‑number providers
+3.1 Cloud telephony providers
+
+Twilio Programmable Voice / BYOC – Twilio provides South‑African local and mobile numbers and supports inbound/outbound calls and SIP trunking. Pricing (May 2025) shows local call origination at US$0.010 per minute and termination at US$0.027 per minute
+twilio.com
+ with optional features like call recording (US$0.0025 per minute), transcription (US$0.05 per minute) and generative AI transcriptions (US$0.018 per 1 000 characters)
+twilio.com
+. Twilio Flex can orchestrate IVR flows and integrate with WhatsApp and other channels
+business.com
+.
+
+Voiso – Voiso offers local, national (087), mobile (060–069, 071–079, 081–084) and toll‑free (0800) numbers
+voiso.com
+. Calls are forwarded to agents using VoIP or PSTN, and the platform includes features like local caller ID, call statistics dashboards and remote‑work routing
+voiso.com
+. Setup involves signing up, receiving platform access and choosing a number with the help of an account manager
+voiso.com
+. Voiso’s contact centre includes an AI predictive dialer that dials numbers based on agent availability and uses AI answering machine detection
+voiso.com
+.
+
+Telnyx / Plivo / AVOXI – Alternative CPaaS providers offer South‑African numbers. AVOXI emphasises global voice services and a free plan for startups
+avoxi.com
+. Telnyx and Plivo integrate with open‑source platforms like Pipecat (serialisers for telephony)
+github.com
+.
+
+On‑premise PBX with SIP trunk – For businesses requiring full control, carriers such as Telkom, Vodacom or MTN provide SIP trunks to connect to a local PBX. This option demands more infrastructure and expertise but may reduce per‑minute costs and support internal routing.
+
+3.2 Toll‑free and local number strategy
+
+Local presence: Use geographic numbers (021 for Cape Town, 011 for Johannesburg) for general enquiries. This increases answer rates and conveys trust
+voiso.com
+.
+
+National 087 number: Use for centralised support lines where geographic association is less important. Calls are priced like local calls and can be forwarded anywhere within the country
+voiso.com
+.
+
+Toll‑free 0800: Provide for high‑touch support or complaints; the company bears the call cost but reduces barriers for customers
+voiso.com
+.
+
+4 Voice agent and TTS technologies
+4.1 Commercial TTS services supporting South‑African voice
+Service	Highlights	Integration
+Narakeet	Provides neural South‑African voices (Aletta, Piet, Charlize, etc.). Produces audio faster and cheaper than hiring voice talent
+narakeet.com
+. Supports script upload and audio download; pay‑per‑use pricing.	Use for pre‑recorded prompts and system announcements. Export audio as MP3/WAV and integrate into IVR.
+Qfrency (Inclusive Solutions)	Offers high‑quality computer‑synthesised voices covering multiple South‑African languages (English, Afrikaans, etc.) and emphasises improved understanding and customer satisfaction
+inclusivesolutions.co.za
+.	Suitable for IVR prompts and multi‑lingual call flows. Requires purchase of voices and integration into TTS engine.
+ElevenLabs African‑accent TTS	Provides a range of African accents with contextual awareness, natural pauses, tone/emotional control and custom voice creation
+elevenlabs.io
+.	Used via API; ideal for AI‑agent responses. Pricing based on character usage and voice cloning.
+Google Cloud TTS / Amazon Polly / Microsoft Azure	Support South‑African English voices (e.g., en‑ZA). Part of larger CCaaS ecosystems and integrate easily with contact centre platforms.	Suitable for agent responses via CCAI, Connect or Genesys.
+4.2 Voice agent frameworks
+
+Vapi.ai – Developer‑friendly platform for building advanced voice AI agents. It powers more than 150 million calls and over 1.5 million assistants, and exposes everything via API with 1 000s of configurations and integrations
+vapi.ai
+vapi.ai
+. Features include:
+
+Multilingual support: speak more than 100 languages
+vapi.ai
+.
+
+API‑native: all configuration is API‑driven with automated testing and A/B experimentation
+vapi.ai
+.
+
+Bring your own models: supply your own STT, LLM or TTS models, or plug in self‑hosted models
+vapi.ai
+.
+
+Tool calling: integrate external APIs to fetch data or perform actions (e.g., CRM look‑ups, order updates)
+vapi.ai
+.
+
+Scalability: enterprise infrastructure with 99.99 % uptime and real‑time audio
+vapi.ai
+.
+
+Pipecat – An open‑source framework for voice and multimodal conversational AI. It offers connectors to numerous STT services (AssemblyAI, AWS, Deepgram, Soniox, etc.), LLMs (OpenAI, Anthropic, Mistral, Gemini, etc.), TTS providers (ElevenLabs, AWS, PlayHT, etc.), and telephony serialisers (Twilio, Plivo, Telnyx)
+github.com
+. Pipecat includes a CLI for project scaffolding, a Voice UI kit for building user interfaces, structured conversation flows and debugging tools like Whisker
+github.com
+. Its open nature offers maximum control but requires development resources.
+
+CenturionAI / AI‑based call‑centre vendors – South‑African vendors provide ready‑made AI voice agents. For instance, CenturionAI offers agents for customer service, sales, reception and debt collection with multi‑language support (English, Afrikaans, and other SA languages) and local context recognition (“braai”, “bakkie”, etc.)
+centurionai.co.za
+. Their technical integration plan emphasises compatibility with telecom providers (Telkom, Vodacom, MTN, Cell C), SIP trunking, CRM (Salesforce, HubSpot, Zoho) and accounting systems, and recommends 5–20 Mbps bandwidth
+centurionai.co.za
+. Implementation typically takes 7–14 days with discovery, system development, training and launch
+centurionai.co.za
+.
+
+5 Contact centre platforms
+5.1 Twilio Flex
+
+Twilio Flex is a highly customisable CCaaS platform with robust developer support. A 2025 review notes that it is developer‑friendly and offers extensive documentation and an app marketplace
+business.com
+. Key capabilities include:
+
+Drag‑and‑drop IVR and workflows: Twilio Studio allows businesses to build interactive voice responses, call forwarding, auto‑responders and appointment reminders
+business.com
+. Flows can integrate WhatsApp and SMS to gather more data before transferring to a human agent.
+
+Omnichannel communications: unified interface for voice, SMS, WhatsApp, chat and social channels; conversation histories are available to agents
+business.com
+.
+
+Admin and agent dashboards: supervisors can program new workflows, integrate apps, transcribe calls and monitor metrics like wait times and first‑contact resolution
+business.com
+.
+
+Open architecture: integrates easily with CRM via APIs and supports custom UIs; built on Twilio’s CPaaS.
+
+Pros: strong developer tooling, flexible IVR, global telephony. Cons: cost may rise with heavy call volumes; building custom flows requires development effort.
+
+5.2 Genesys Cloud CX
+
+Genesys Cloud (formerly PureCloud) unifies voice, chat, email and social media and includes AI Experience capabilities. Its features:
+
+Virtual agents and knowledge bots: create bots that understand context and deliver 24/7 service
+genesys.com
+.
+
+Agent Copilot: provides real‑time assistance, contextual information and generative summaries to agents
+genesys.com
+.
+
+AI Studio: centralised environment for building AI‑powered experiences and predictive routing
+genesys.com
+.
+
+Predictive routing: matches customers with the best available agent to improve KPIs
+genesys.com
+.
+
+Pros: enterprise‑grade reliability, rich AI toolkit, predictive routing. Cons: licensing cost; may require specialised implementation partner.
+
+5.3 Google Cloud Contact Center AI (CCAI)
+
+Google CCAI integrates Dialogflow CX for building IVR and virtual agents and includes powerful agent assist features. An industry review notes that:
+
+Omnichannel support: voice, SMS and chat with integration via APIs and SDKs
+getvoip.com
+.
+
+Visual IVR & ACD: drag‑and‑drop IVR builder and AI‑based routing through Dialogflow
+getvoip.com
+.
+
+Virtual agent capabilities: pre‑built templates, knowledge‑base integration, sentiment analysis and visual builder for complex flows
+getvoip.com
+.
+
+Agent Assist: live transcription, knowledge assist, smart reply/compose and post‑call summarisation
+getvoip.com
+.
+
+CCAI Insights: dashboards for conversation volume, customer sentiment and agent performance
+getvoip.com
+.
+
+Pros: strong natural language understanding (NLU) via Dialogflow, integration with Google’s ecosystem. Cons: may require Google Cloud commitment; South‑African number procurement must be done through a third‑party provider.
+
+5.4 Amazon Connect
+
+Amazon Connect is a fully‑managed cloud contact centre. A December 2024 release adds generative AI across Connect:
+
+Amazon Q & Lex integration: generative AI to conduct autonomous conversations, propose responses and handle customer enquiries
+cxtoday.com
+. Businesses can choose the LLM and set guardrails to prevent undesirable content
+cxtoday.com
+.
+
+Proactive outreach: integrated data lake segments customers and sends personalised notifications (e.g., outage notices)
+cxtoday.com
+.
+
+Contact Lens analytics: generative AI analyses conversations, categorises them and surfaces agent performance trends
+cxtoday.com
+.
+
+Additional updates: easier sensitive‑data collection, WhatsApp Business messaging, external voice transfers and built‑in dashboards
+cxtoday.com
+.
+
+Pros: pay‑as‑you‑go pricing, deep AWS integration, generative AI features. Cons: requires AWS expertise; limited built‑in South‑African voices (but can integrate with local TTS via Amazon Polly custom voices).
+
+5.5 Voiso Contact Center
+
+Voiso offers a ready‑made call centre platform with local numbers and emphasises remote work and improved answer rates via local caller ID
+voiso.com
+. It provides call statistics dashboards and AI predictive dialer with answer‑machine detection
+voiso.com
+. Voiso is well‑suited for outbound sales and campaigns but has limited custom AI capabilities; it can integrate with CRMs and some AI vendors.
+
+5.6 Choosing a platform
+
+The choice depends on budget, technical skills and desired customisation:
+
+Developer‑centric and highly customisable: Twilio Flex or Vapi + Pipecat combination. Use if the company has software engineers able to build flows, integrate AI models and maintain infrastructure.
+
+Enterprise‑grade with built‑in AI: Genesys or Google CCAI. Use if reliability and predictive routing matter and budgets allow subscription/licensing fees.
+
+AWS‑first strategy: Amazon Connect, especially if the business already uses AWS services; generative AI features can provide advanced analytics.
+
+Quick start with local support: Voiso or CenturionAI. They offer local numbers, quick onboarding and pre‑built voice agents tailored to South Africa with multi‑language support
+centurionai.co.za
+.
+
+6 Proposed architecture
+
+Below is a recommended architecture for building a call‑centre agent that uses an AI voice for initial engagement and routes callers to sub‑agents or human agents. The architecture is modular to allow substitution of platforms.
+
+Telephony layer: Choose a telephony provider (Twilio, Voiso or Telnyx) to secure local/national/toll‑free numbers. Configure SIP trunking or API integration to route inbound calls to the IVR/voice platform.
+
+IVR and call orchestration layer: Use a contact centre platform such as Twilio Flex, Genesys or Google CCAI. Create a multi‑option IVR flow: greeting → menu (sales, shipping, support, accounts) → capture customer input via DTMF or speech. Use built‑in call flows or drag‑and‑drop builders to route calls. Connect to multi‑channel channels (WhatsApp, SMS, chat) if needed.
+
+AI voice agent layer: Integrate Vapi.ai or Pipecat to handle the conversation once the caller selects an option. The agent uses:
+
+Speech‑to‑text (STT): Choose a provider (e.g., Google Speech‑to‑Text, AssemblyAI, Deepgram). Pipecat can switch among providers
+github.com
+. Vapi allows bringing your own transcription model
+vapi.ai
+.
+
+LLM: Use GPT‑4‑turbo or Claude for natural language understanding; optionally fine‑tune for domain‑specific knowledge and integrate with retrieval‑augmented generation to query CRM or knowledge base.
+
+Tools: Use tool‑calling to fetch order status, log tickets or schedule call‑backs via API
+vapi.ai
+. Connect to CRM (Salesforce/Zoho/HubSpot) to update records.
+
+TTS: Use South‑African voices (Narakeet, Qfrency, ElevenLabs) to respond to callers. Provide fallback to synthesised voices if unavailable.
+
+Call routing and escalation: After the AI agent collects information and performs actions, decide whether the call is resolved or should be transferred:
+
+Sales: If the AI qualifies a lead, transfer to a human sales agent; optionally schedule call‑back via CRM.
+
+Shipping: Provide tracking status; if there is an exception, transfer to logistics agent.
+
+Support: Attempt troubleshooting; if unresolved, create a ticket and route to support desk.
+
+Accounts: Provide invoice details; if the customer wishes to pay, send a payment link via SMS/WhatsApp; if account issue persists, transfer to accounts agent.
+
+Human agent and supervisor layer: Connect to existing contact centre system (e.g., Genesys or Twilio Flex). Agents receive calls in softphones or physical phones. Use Agent Assist features (transcription, knowledge suggestions, generative summary). Supervisors monitor queues, agent performance and call statistics
+business.com
+.
+
+Analytics and quality assurance: Record calls (with consent). Use analytics platforms (Twilio Voice Insights, AWS Contact Lens, Genesys Insights) to monitor sentiment, containment rate and first‑contact resolution. Use A/B testing (available in Vapi) to experiment with prompts and voices
+vapi.ai
+. Store data securely and comply with POPIA requirements.
+
+Compliance and security: Ensure calls are recorded only with consent; inform callers of recording at start. Encrypt recordings and transcripts; store them for the legally required period. Maintain role‑based access to recordings and data. Provide data subject request mechanisms. Implement DNC (do‑not‑call) lists and adhere to Section 69 of POPIA (direct marketing) requiring explicit consent. Use AI guardrails to avoid sensitive topics and filter out sensitive information (e.g., Amazon Connect guardrails
+cxtoday.com
+).
+
+7 Implementation roadmap
+
+Discovery and requirements (1 week): Identify call volumes, language requirements, CRM integrations, compliance policies and budget. Decide whether to build fully custom (Vapi/Pipecat + CPaaS) or adopt an integrated CCaaS (Genesys/Amazon Connect). Evaluate telephony providers based on number availability and cost.
+
+Select vendors and sign up (1 week): Acquire South‑African numbers from Twilio or Voiso. Subscribe to TTS provider (Narakeet/Qfrency/ElevenLabs) and choose STT and LLM providers. Subscribe to chosen contact centre platform.
+
+Design IVR and conversation flows (1–2 weeks): Using Twilio Studio, Genesys AI Studio or Dialogflow, design call flows. Implement conversation scripts in Vapi/Pipecat with prompt engineering and integrate tool‑calling to CRM and back‑end systems. Use multilingual support for Afrikaans or Zulu if needed.
+
+Development and integration (2–4 weeks): Develop the AI agent back‑end and integrate with telephony and contact centre. Test TTS voices and adjust pronunciation. Implement CRM integration and create dashboards for supervisors. Conduct security and compliance review.
+
+Testing (1 week): Use automated testing (available in Vapi
+vapi.ai
+) and Beta test with internal staff. Collect call samples, check voice naturalness and adjust prompts. Validate call transfers and ensure sub‑agent routing works.
+
+Training and deployment (1 week): Train human agents on using the dashboards and handling AI‑escalated calls. Deploy gradually, starting with a single call queue. Monitor performance and iterate. CenturionAI notes that a complete AI voice agent implementation can be delivered in 7–14 days
+centurionai.co.za
+; our timeline may be longer due to custom development.
+
+Continuous improvement: Use analytics and A/B testing to improve prompts, voices and flows. Monitor legal changes (e.g., POPIA amendments) and update consent messages accordingly.
+
+8 Summary
+
+By combining a reliable telephony provider (Twilio or Voiso), a flexible contact centre platform (Twilio Flex, Genesys, Google CCAI or Amazon Connect) and a voice‑agent framework (Vapi.ai or Pipecat) with locally‑authentic TTS voices, Kenny can deploy a sophisticated agentic call‑centre solution. The AI agent will greet callers with a South‑African accent, collect information, perform transactions via tool‑calling, and either resolve issues autonomously or transfer callers to specialised sub‑agents. Integrating analytics, agent assist and compliance controls ensures the system meets business needs while adhering to South African regulations.

@@ -1,0 +1,91 @@
+# ==========================================
+# CRITICAL: Environment Variables & Secrets
+# ==========================================
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+*.env
+!.env.example
+
+# API Keys and Secrets
+*_key.txt
+*_secret.txt
+credentials.json
+secrets.json
+
+# ==========================================
+# Node.js
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# ==========================================
+# Logs
+# ==========================================
+*.log
+logs/
+*.log.*
+
+# ==========================================
+# Audio Files (TTS generated)
+# ==========================================
+*.wav
+*.mp3
+*.ogg
+audio/
+recordings/
+
+# ==========================================
+# Database Files
+# ==========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# Call Data & Customer Information
+# ==========================================
+recordings/
+transcriptions/
+customer_data/
+call_logs/
+
+# ==========================================
+# Build & Distribution
+# ==========================================
+dist/
+build/
+tmp/
+temp/
+*.tmp
+
+# ==========================================
+# IDE & OS Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# Coverage & Testing
+# ==========================================
+coverage/
+.nyc_output/
+*.lcov
+
+# ==========================================
+# Backup Files
+# ==========================================
+*.bak
+*.backup

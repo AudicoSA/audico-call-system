@@ -1,0 +1,29 @@
+{
+  "name": "audico-call-system",
+  "version": "1.0.0",
+  "description": "AI-powered call center agent with South African voice and multi-option IVR",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "echo \"Tests coming soon\" && exit 0"
+  },
+  "keywords": ["ai", "call-center", "voice-agent", "ivr", "south-africa"],
+  "author": "Kenny",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "twilio": "^4.23.0",
+    "openai": "^4.28.0",
+    "@anthropic-ai/sdk": "^0.17.0",
+    "@supabase/supabase-js": "^2.39.3",
+    "axios": "^1.6.5",
+    "dotenv": "^16.4.1",
+    "ws": "^8.16.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}
