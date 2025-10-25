@@ -2,6 +2,7 @@ import express from 'express';
 import { config, validateConfig } from './config/config.js';
 import voiceRoutes from './routes/voice.js';
 import analyticsRoutes from './routes/analytics.js';
+import audioRoutes from './routes/audio.js';
 
 // Validate configuration before starting
 let configError = null;
@@ -73,6 +74,7 @@ app.get('/', (req, res) => {
 // Mount routes
 app.use('/voice', voiceRoutes);
 app.use('/analytics', analyticsRoutes);
+app.use('/audio', audioRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

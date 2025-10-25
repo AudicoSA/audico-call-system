@@ -6,6 +6,7 @@ import { ttsService } from '../services/tts.js';
 import { sttService } from '../services/stt.js';
 import { crmService } from '../services/crm.js';
 import { config } from '../config/config.js';
+import { prepareAudioUrl } from './audio.js';
 
 const router = express.Router();
 
@@ -36,15 +37,32 @@ router.post('/incoming', async (req, res) => {
       fromCountry: req.body.FromCountry,
     });
 
-    // Generate greeting response
     const baseUrl = getBaseUrl(req);
-    const twiml = telephonyService.createGreetingResponse(baseUrl);
+
+    // Generate audio for greeting with ElevenLabs
+    const greetingText = config.recording.enabled
+      ? `${config.recording.consentMessage} Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.`
+      : 'Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.';
+
+    const audioUrl = await prepareAudioUrl(
+      greetingText,
+      callSid,
+      'greeting.mp3',
+      baseUrl
+    );
+
+    // Create TwiML with audio playback
+    const twiml = telephonyService.createGreetingResponseWithAudio(baseUrl, audioUrl);
 
     res.type('text/xml');
     res.send(twiml);
   } catch (error) {
     console.error('[Voice] Error handling incoming call:', error);
-    res.status(500).send('Error processing call');
+    // Fallback to Twilio TTS if ElevenLabs fails
+    const baseUrl = getBaseUrl(req);
+    const twiml = telephonyService.createGreetingResponse(baseUrl);
+    res.type('text/xml');
+    res.send(twiml);
   }
 });
 

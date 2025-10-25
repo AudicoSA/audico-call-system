@@ -16,7 +16,42 @@ export class TelephonyService {
   }
 
   /**
-   * Create TwiML response for initial greeting
+   * Create TwiML response for initial greeting with ElevenLabs audio
+   * @param {string} baseUrl - Base URL for callbacks
+   * @param {string} audioUrl - URL to ElevenLabs audio file
+   * @returns {string} - TwiML XML
+   */
+  createGreetingResponseWithAudio(baseUrl, audioUrl) {
+    const twiml = new VoiceResponse();
+
+    // Play ElevenLabs audio
+    if (audioUrl) {
+      twiml.play(audioUrl);
+    }
+
+    // Gather speech input
+    twiml.gather({
+      input: 'speech',
+      action: `${baseUrl}/voice/process-input`,
+      method: 'POST',
+      timeout: 5,
+      speechTimeout: 'auto',
+      language: 'en-ZA',
+    });
+
+    // Fallback if no input - use Twilio TTS
+    twiml.say({
+      voice: 'Polly.Joanna',
+      language: 'en-ZA',
+    }, 'I did not hear anything. Please call back when you are ready.');
+
+    twiml.hangup();
+
+    return twiml.toString();
+  }
+
+  /**
+   * Create TwiML response for initial greeting (fallback with Twilio TTS)
    * @param {string} baseUrl - Base URL for callbacks
    * @returns {string} - TwiML XML
    */
