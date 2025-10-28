@@ -9,10 +9,12 @@ import express from 'express';
 import axios from 'axios';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
+import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import syncRoutes from './routes/sync.js';
 
 dotenv.config();
 
@@ -27,6 +29,21 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// OpenCart MySQL Database Connection
+const mysqlPool = mysql.createPool({
+  host: process.env.OPENCART_DB_HOST,
+  port: parseInt(process.env.OPENCART_DB_PORT || '3306'),
+  user: process.env.OPENCART_DB_USER,
+  password: process.env.OPENCART_DB_PASSWORD,
+  database: process.env.OPENCART_DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  multipleStatements: false,
+});
+
+const TABLE_PREFIX = process.env.OPENCART_TABLE_PREFIX || 'oc_';
 
 // Voice IDs
 const AGENT_VOICES = {
@@ -47,6 +64,214 @@ await fs.mkdir(transcriptsDir, { recursive: true });
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/audio', express.static(audioDir));
+
+// Register sync routes for automated daily product sync
+app.use(syncRoutes);
+
+// ============================================
+// SHIPLOGIC WEBHOOK HANDLER
+// ============================================
+
+/**
+ * ShipLogic webhook endpoint
+ * Receives notifications when shipments are created/updated
+ * Stores tracking info in OpenCart database
+ */
+app.post('/webhooks/shiplogic', async (req, res) => {
+  try {
+    console.log('📦 [SHIPLOGIC WEBHOOK] Received:', JSON.stringify(req.body, null, 2));
+
+    // ShipLogic sends data directly at root level, not wrapped in {event, shipment}
+    const shipment = req.body;
+
+    if (!shipment || !shipment.shipment_id) {
+      console.log('⚠️  [SHIPLOGIC WEBHOOK] No shipment data in request');
+      return res.status(400).json({ error: 'No shipment data provided' });
+    }
+
+    // Extract order number from custom_tracking_reference (TCG waybill)
+    // Format: "TCG28630" or "TCG28630/1"
+    let orderNumber = null;
+
+    if (shipment.custom_tracking_reference) {
+      const orderMatch = shipment.custom_tracking_reference.match(/TCG(\d+)/i);
+      if (orderMatch) {
+        orderNumber = orderMatch[1];
+      }
+    }
+
+    // Look up order in OpenCart
+    let orderId = null;
+    if (orderNumber) {
+      const [rows] = await mysqlPool.execute(
+        `SELECT order_id FROM ${TABLE_PREFIX}order WHERE order_id = ? LIMIT 1`,
+        [parseInt(orderNumber)]
+      );
+
+      if (rows.length > 0) {
+        orderId = rows[0].order_id;
+        console.log(`✅ [SHIPLOGIC WEBHOOK] Matched to OpenCart order ${orderId}`);
+      } else {
+        console.log(`⚠️  [SHIPLOGIC WEBHOOK] Order ${orderNumber} not found in OpenCart`);
+      }
+    }
+
+    // Store tracking information
+    // Map ShipLogic fields to our database fields
+    const trackingData = {
+      order_id: orderId,
+      order_number: orderNumber || 'UNKNOWN',
+      shiplogic_shipment_id: shipment.shipment_id,
+      shiplogic_reference: shipment.short_tracking_reference || shipment.shipment_id,
+      tcg_waybill: shipment.custom_tracking_reference || null,
+      tcg_order_reference: shipment.custom_tracking_reference || null,
+      parcel_tracking_reference: shipment.parcel_tracking_references ? shipment.parcel_tracking_references[0] : null,
+      status: shipment.status || 'pending',
+      status_message: shipment.update_type || null,
+      shipment_created_at: shipment.shipment_time_created || new Date(),
+      last_updated_at: new Date(),
+      webhook_received_at: new Date(),
+      webhook_payload: JSON.stringify(shipment)
+    };
+
+    // Insert or update tracking record
+    const query = `
+      INSERT INTO oc_order_shiplogic_tracking (
+        order_id, order_number, shiplogic_shipment_id,
+        shiplogic_reference, tcg_waybill, tcg_order_reference,
+        parcel_tracking_reference, status, status_message,
+        shipment_created_at, last_updated_at, webhook_received_at,
+        webhook_payload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        tcg_waybill = VALUES(tcg_waybill),
+        status = VALUES(status),
+        status_message = VALUES(status_message),
+        last_updated_at = VALUES(last_updated_at),
+        webhook_payload = VALUES(webhook_payload)
+    `;
+
+    await mysqlPool.execute(query, [
+      trackingData.order_id,
+      trackingData.order_number,
+      trackingData.shiplogic_shipment_id,
+      trackingData.shiplogic_reference,
+      trackingData.tcg_waybill,
+      trackingData.tcg_order_reference,
+      trackingData.parcel_tracking_reference,
+      trackingData.status,
+      trackingData.status_message,
+      trackingData.shipment_created_at,
+      trackingData.last_updated_at,
+      trackingData.webhook_received_at,
+      trackingData.webhook_payload
+    ]);
+
+    // Also insert status history
+    if (orderId && shipment.status) {
+      const historyQuery = `
+        INSERT INTO oc_order_shiplogic_tracking_history (
+          tracking_id, status, status_message, changed_at
+        ) VALUES (
+          (SELECT id FROM oc_order_shiplogic_tracking WHERE shiplogic_shipment_id = ?),
+          ?, ?, ?
+        )
+      `;
+
+      await mysqlPool.execute(historyQuery, [
+        trackingData.shiplogic_shipment_id,
+        shipment.status,
+        shipment.status_message || null,
+        new Date()
+      ]);
+    }
+
+    // ============================================
+    // UPDATE OPENCART ORDER STATUS & HISTORY
+    // ============================================
+    if (orderId) {
+      // Determine OpenCart order status based on ShipLogic status
+      let newOrderStatus = null;
+      let statusComment = '';
+
+      const shipStatus = (shipment.status || '').toLowerCase();
+
+      if (shipStatus === 'submitted' || shipStatus === 'collection-assigned') {
+        // New booking - set to "Courier Booked" (18)
+        newOrderStatus = 18;
+        statusComment = `Courier booked with The Courier Guy. Tracking: ${shipment.custom_tracking_reference || 'Pending'}. Reference: ${shipment.short_tracking_reference || ''}`;
+      } else if (shipStatus === 'collected' || shipStatus === 'in-transit' || shipStatus === 'out-for-delivery') {
+        // Shipped - set to "Shipped" (3)
+        newOrderStatus = 3;
+        statusComment = `Shipment ${shipStatus}. Tracking: ${shipment.custom_tracking_reference}. Current location: ${shipment.collection_hub || 'In transit'} → ${shipment.delivery_hub || 'Destination'}`;
+      } else if (shipStatus === 'delivered') {
+        // Delivered - set to "Complete" (5)
+        newOrderStatus = 5;
+        statusComment = `Order delivered successfully. Tracking: ${shipment.custom_tracking_reference}. Delivered on ${shipment.shipment_delivered_date || 'today'}.`;
+      }
+
+      if (newOrderStatus) {
+        // Check current order status
+        const [currentStatus] = await mysqlPool.execute(
+          `SELECT order_status_id FROM ${TABLE_PREFIX}order WHERE order_id = ?`,
+          [orderId]
+        );
+
+        const currentOrderStatus = currentStatus[0]?.order_status_id;
+
+        // Only update if status has changed
+        if (currentOrderStatus !== newOrderStatus) {
+          // Update order status in oc_order table
+          await mysqlPool.execute(
+            `UPDATE ${TABLE_PREFIX}order SET order_status_id = ? WHERE order_id = ?`,
+            [newOrderStatus, orderId]
+          );
+
+          // Add entry to oc_order_history
+          await mysqlPool.execute(
+            `INSERT INTO ${TABLE_PREFIX}order_history (order_id, order_status_id, notify, comment, date_added)
+             VALUES (?, ?, 1, ?, NOW())`,
+            [orderId, newOrderStatus, statusComment]
+          );
+
+          console.log(`✅ [OPENCART UPDATE] Order ${orderId} status updated to ${newOrderStatus}`);
+          console.log(`   Comment: ${statusComment}`);
+        } else {
+          console.log(`ℹ️  [OPENCART UPDATE] Order ${orderId} already at status ${newOrderStatus}, skipping update`);
+        }
+      }
+    }
+
+    console.log(`✅ [SHIPLOGIC WEBHOOK] Tracking stored for order ${orderNumber || 'UNKNOWN'}`);
+    console.log(`   ShipLogic ID: ${shipment.shipment_id}`);
+    console.log(`   TCG Waybill: ${shipment.custom_tracking_reference || 'Not yet assigned'}`);
+    console.log(`   Status: ${shipment.status || 'pending'}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Webhook received and processed',
+      order_number: orderNumber,
+      shiplogic_id: shipment.shipment_id
+    });
+
+  } catch (error) {
+    console.error('❌ [SHIPLOGIC WEBHOOK] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test webhook endpoint (for manual testing)
+app.get('/webhooks/shiplogic/test', async (req, res) => {
+  res.json({
+    status: 'ready',
+    message: 'ShipLogic webhook endpoint is active',
+    webhook_url: `${getBaseUrl(req)}/webhooks/shiplogic`,
+    instructions: 'Configure this URL in ShipLogic webhook settings'
+  });
+});
 
 // Check database connection at startup
 async function checkDatabase() {
@@ -123,6 +348,155 @@ async function searchProducts(query, limit = 10) {
   return data || [];
 }
 
+/** Look up OpenCart order by ID */
+async function lookupOrder(orderId) {
+  console.log(`[OPENCART] Looking up order ${orderId}`);
+
+  const [rows] = await mysqlPool.execute(
+    `SELECT order_id, customer_id, firstname, lastname, email, telephone,
+            order_status_id, total, currency_code, date_added, shipping_method
+     FROM ${TABLE_PREFIX}order
+     WHERE order_id = ?
+     LIMIT 1`,
+    [parseInt(orderId)]
+  );
+
+  if (rows.length === 0) {
+    console.log(`[OPENCART] Order ${orderId} not found`);
+    return null;
+  }
+
+  console.log(`[OPENCART] Order ${orderId} found`);
+  return rows[0];
+}
+
+/** Get order products */
+async function getOrderProducts(orderId) {
+  const [rows] = await mysqlPool.execute(
+    `SELECT order_product_id, product_id, name, model, quantity, price, total
+     FROM ${TABLE_PREFIX}order_product
+     WHERE order_id = ?`,
+    [parseInt(orderId)]
+  );
+
+  console.log(`[OPENCART] Found ${rows.length} products for order ${orderId}`);
+  return rows;
+}
+
+/** Get order history */
+async function getOrderHistory(orderId) {
+  const [rows] = await mysqlPool.execute(
+    `SELECT order_history_id, order_status_id, notify, comment, date_added
+     FROM ${TABLE_PREFIX}order_history
+     WHERE order_id = ?
+     ORDER BY date_added DESC`,
+    [parseInt(orderId)]
+  );
+
+  console.log(`[OPENCART] Found ${rows.length} history entries for order ${orderId}`);
+  return rows;
+}
+
+/** Extract tracking number from order history */
+function extractTrackingNumber(history) {
+  if (!history || history.length === 0) return null;
+
+  for (const entry of history) {
+    if (!entry.comment) continue;
+
+    // Check for tracking URLs
+    const urlMatch = entry.comment.match(/https?:\/\/[^\s]+/);
+    if (urlMatch) return urlMatch[0];
+
+    // Check for tracking ref numbers
+    const refMatch = entry.comment.match(/ref[=:]\s*([A-Z0-9\-]+)/i);
+    if (refMatch) return refMatch[1];
+  }
+
+  return null;
+}
+
+/** Check if order needs shipping update (>2 days old without tracking) */
+function needsShippingUpdate(order, history) {
+  if (!order || !order.date_added) return false;
+
+  const orderDate = new Date(order.date_added);
+  const now = new Date();
+  const daysDiff = (now - orderDate) / (1000 * 60 * 60 * 24);
+
+  if (daysDiff < 2) return false;
+
+  const hasTracking = extractTrackingNumber(history) !== null;
+  return !hasTracking;
+}
+
+/** Format comprehensive shipping response */
+function formatShippingResponse(order, products, history) {
+  if (!order) {
+    return { text: 'Order not found', needsUpdate: false };
+  }
+
+  const orderId = order.order_id;
+  const orderDate = new Date(order.date_added);
+  const dateStr = orderDate.toLocaleDateString('en-ZA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const total = `R${parseFloat(order.total || 0).toFixed(2)}`;
+
+  const trackingInfo = extractTrackingNumber(history);
+  const needsUpdate = needsShippingUpdate(order, history);
+
+  let response = 'Let me check that for you. ';
+
+  // Confirm product
+  if (products && products.length > 0) {
+    const productNames = products.map(p => `${p.name} quantity ${p.quantity}`).join(', ');
+    response += `I can confirm your order for ${productNames}. `;
+  }
+
+  response += `This order was placed on ${dateStr} with a total of ${total}. `;
+
+  // Status
+  const statusMap = {
+    1: 'pending payment',
+    2: 'being processed',
+    3: 'shipped',
+    5: 'complete',
+    7: 'cancelled',
+    10: 'failed',
+    11: 'refunded',
+    18: 'shipped',
+    29: 'awaiting collection',
+  };
+
+  const statusName = statusMap[order.order_status_id] || 'being processed';
+  response += `The current status is ${statusName}. `;
+
+  // Tracking
+  if (trackingInfo) {
+    if (trackingInfo.startsWith('http')) {
+      // Extract tracking number from URL (after ref= or ref:)
+      const refMatch = trackingInfo.match(/ref[=:]([A-Z0-9\-]+)/i);
+      if (refMatch) {
+        response += `Shipped with The Courier Guy. Tracking ${refMatch[1]}. `;
+      } else {
+        response += `Your tracking information is available at: ${trackingInfo}. `;
+      }
+    } else {
+      response += `Tracking reference ${trackingInfo}. `;
+    }
+  }
+
+  // Check if needs update
+  if (needsUpdate) {
+    response += `I notice this order is more than 2 days old and doesn't have shipping information yet. I will request an immediate update from our logistics team and have them send you the tracking details as soon as possible. `;
+  }
+
+  return { text: response, needsUpdate, tracking: trackingInfo };
+}
+
 /** Get AI response with product knowledge */
 async function getAgentResponse(userMessage, callSid, agentType) {
   const state = callStates.get(callSid) || { history: [], agent: 'receptionist' };
@@ -168,9 +542,21 @@ RESPONSE STYLE:
 
 If search returns no results, suggest they speak with a specialist or ask for similar products.`,
 
-    shipping: `You are a shipping specialist for Audico.
-Help with order tracking and delivery questions.
-Keep responses SHORT (2-3 sentences).`,
+    shipping: `You are a shipping specialist for Audico, a South African electronics retailer.
+
+When a customer asks about their order, follow this EXACT sequence:
+
+1. IMMEDIATELY say: "Let me login to our system"
+2. Ask for: order number (if not already provided)
+3. Use the track_order tool to look up the order in OpenCart database
+4. Read the tool result CAREFULLY - it contains the REAL order information
+5. Repeat back ONLY what the tool result says - do not make up ANY information
+6. DO NOT invent delivery dates, signed-for names, or tracking numbers
+7. If the tool says "Order not found", tell the customer exactly that
+
+CRITICAL: NEVER make up information. ONLY say what the track_order tool returns.
+
+Keep responses SHORT and based ONLY on the tool result.`,
 
     support: `You are a technical support specialist for Audico.
 Help with product troubleshooting and technical questions.
@@ -181,28 +567,49 @@ Help with billing and payment questions.
 Keep responses SHORT (2-3 sentences).`
   };
 
-  // Define tools for sales agent
-  const tools = agentType === 'sales' ? [
-    {
-      name: 'search_products',
-      description: 'Search Audico product catalog in real-time. Use this EVERY TIME a customer asks about a product. Search by brand name, model number, product type, or SKU.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Search query - brand, model, product type, or SKU (e.g., "Denon AVR-X1800H", "wireless headphones", "JBL")'
+  // Define tools based on agent type
+  let tools = undefined;
+
+  if (agentType === 'sales') {
+    tools = [
+      {
+        name: 'search_products',
+        description: 'Search Audico product catalog in real-time. Use this EVERY TIME a customer asks about a product. Search by brand name, model number, product type, or SKU.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query - brand, model, product type, or SKU (e.g., "Denon AVR-X1800H", "wireless headphones", "JBL")'
+            },
+            limit: {
+              type: 'integer',
+              description: 'Maximum number of results (default 10)',
+              default: 10
+            }
           },
-          limit: {
-            type: 'integer',
-            description: 'Maximum number of results (default 10)',
-            default: 10
-          }
-        },
-        required: ['query']
+          required: ['query']
+        }
       }
-    }
-  ] : undefined;
+    ];
+  } else if (agentType === 'shipping') {
+    tools = [
+      {
+        name: 'track_order',
+        description: 'Look up an order in OpenCart database by order ID. Returns REAL order information including products, date, status, and tracking number. DO NOT make up information - only use what this tool returns.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            order_id: {
+              type: 'string',
+              description: 'Order ID number (e.g., "28630", "28645")'
+            }
+          },
+          required: ['order_id']
+        }
+      }
+    ];
+  }
 
   try {
     let response = await anthropic.messages.create({
@@ -239,6 +646,43 @@ Keep responses SHORT (2-3 sentences).`
           if (block.name === 'search_products') {
             const products = await searchProducts(block.input.query, block.input.limit || 10);
             toolResult = products.length > 0 ? products : [{ message: 'No products found matching that search' }];
+          } else if (block.name === 'track_order') {
+            const orderId = block.input.order_id;
+            const order = await lookupOrder(orderId);
+
+            if (!order) {
+              toolResult = { error: `Order ${orderId} not found in our system` };
+            } else {
+              const products = await getOrderProducts(orderId);
+              const history = await getOrderHistory(orderId);
+
+              // Check ShipLogic tracking database first
+              const [trackingRows] = await mysqlPool.execute(
+                `SELECT tcg_waybill, shiplogic_reference, status, status_message, last_updated_at
+                 FROM oc_order_shiplogic_tracking
+                 WHERE order_id = ?
+                 ORDER BY last_updated_at DESC
+                 LIMIT 1`,
+                [parseInt(orderId)]
+              );
+
+              // If we have ShipLogic tracking, add it to the response
+              if (trackingRows.length > 0) {
+                const tracking = trackingRows[0];
+                console.log(`✅ [TRACKING] Found ShipLogic tracking for order ${orderId}: ${tracking.tcg_waybill || tracking.shiplogic_reference}`);
+
+                // Add tracking to history for the formatter
+                if (tracking.tcg_waybill) {
+                  history.unshift({
+                    comment: `Tracking: ${tracking.tcg_waybill} - Status: ${tracking.status || 'pending'}`,
+                    date_added: tracking.last_updated_at
+                  });
+                }
+              }
+
+              const response = formatShippingResponse(order, products, history);
+              toolResult = response;
+            }
           }
 
           toolResults.push({
