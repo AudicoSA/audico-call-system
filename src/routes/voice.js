@@ -154,7 +154,11 @@ router.post('/process-input', async (req, res) => {
     }
   } catch (error) {
     console.error('[Voice] Error processing input:', error);
-    res.status(500).send('Error processing input');
+    // Return valid TwiML instead of 500 error to prevent "application error"
+    const baseUrl = getBaseUrl(req);
+    const twiml = telephonyService.createGreetingResponse(baseUrl);
+    res.type('text/xml');
+    res.send(twiml);
   }
 });
 
@@ -246,7 +250,11 @@ router.post('/ivr-selection', async (req, res) => {
     }
   } catch (error) {
     console.error('[Voice] Error processing IVR selection:', error);
-    res.status(500).send('Error processing selection');
+    // Return valid TwiML instead of 500 error
+    const baseUrl = getBaseUrl(req);
+    const twiml = telephonyService.createIVRMenu(baseUrl);
+    res.type('text/xml');
+    res.send(twiml);
   }
 });
 
@@ -336,7 +344,15 @@ router.post('/conversation', async (req, res) => {
     res.send(twiml);
   } catch (error) {
     console.error('[Voice] Error in conversation:', error);
-    res.status(500).send('Error processing conversation');
+    // Return valid TwiML with apology message instead of 500 error
+    const baseUrl = getBaseUrl(req);
+    const twiml = telephonyService.createSpeechResponse(
+      'I apologize, but I am having technical difficulties. Let me try again.',
+      null,
+      `${baseUrl}/voice/conversation`
+    );
+    res.type('text/xml');
+    res.send(twiml);
   }
 });
 
