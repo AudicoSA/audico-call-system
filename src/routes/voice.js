@@ -78,17 +78,7 @@ router.post('/process-input', async (req, res) => {
       console.log('[Voice] Menu keyword detected, showing IVR menu');
       const baseUrl = getBaseUrl(req);
 
-      // Try ElevenLabs with pre-cached menu audio
-      const menuText = 'Welcome to Audico how may I direct your call - press 1 for sales, 2 for shipping, 3 for technical support and 4 for accounts.';
-      const audioUrl = await prepareAudioUrl(menuText, callSid, 'menu.mp3', baseUrl);
-
-      if (audioUrl) {
-        const twiml = telephonyService.createIVRMenuWithAudio(baseUrl, audioUrl);
-        res.type('text/xml');
-        return res.send(twiml);
-      }
-
-      // Fallback to Twilio TTS
+      // Use Twilio TTS directly (no ElevenLabs)
       const twiml = telephonyService.createIVRMenu(baseUrl);
       res.type('text/xml');
       return res.send(twiml);
@@ -128,18 +118,10 @@ router.post('/process-input', async (req, res) => {
         }
       );
 
-      // Generate ElevenLabs audio for AI response
-      const audioUrl = await prepareAudioUrl(
-        aiResponse,
-        callSid,
-        `response-${Date.now()}.mp3`,
-        baseUrl,
-        { department: intentAnalysis.department }
-      );
-
+      // Use Twilio TTS directly (no ElevenLabs)
       const twiml = telephonyService.createSpeechResponse(
         aiResponse,
-        audioUrl,
+        null, // No audioUrl - use Twilio TTS
         `${baseUrl}/voice/conversation`,
         { department: intentAnalysis.department }
       );
@@ -171,24 +153,7 @@ router.post('/ivr-menu', async (req, res) => {
     const callSid = req.body.CallSid;
     const baseUrl = getBaseUrl(req);
 
-    // Try ElevenLabs with pre-cached menu (instant playback)
-    const menuText = 'Welcome to Audico how may I direct your call - press 1 for sales, 2 for shipping, 3 for technical support and 4 for accounts.';
-
-    const audioUrl = await prepareAudioUrl(
-      menuText,
-      callSid,
-      'menu.mp3',
-      baseUrl
-    );
-
-    if (audioUrl) {
-      // Use ElevenLabs audio (pre-cached, instant)
-      const twiml = telephonyService.createIVRMenuWithAudio(baseUrl, audioUrl);
-      res.type('text/xml');
-      return res.send(twiml);
-    }
-
-    // Fallback to Twilio TTS
+    // Use Twilio TTS directly (no ElevenLabs)
     const twiml = telephonyService.createIVRMenu(baseUrl);
     res.type('text/xml');
     res.send(twiml);
@@ -321,21 +286,11 @@ router.post('/conversation', async (req, res) => {
       conversationTurns: (state.conversationTurns || 0) + 1,
     });
 
-    // Continue conversation
+    // Continue conversation with Twilio TTS (no ElevenLabs)
     const baseUrl = getBaseUrl(req);
-
-    // Generate ElevenLabs audio for AI response
-    const audioUrl = await prepareAudioUrl(
-      aiResponse,
-      callSid,
-      `conversation-${Date.now()}.mp3`,
-      baseUrl,
-      { department: state.selectedDepartment }
-    );
-
     const twiml = telephonyService.createSpeechResponse(
       aiResponse,
-      audioUrl,
+      null, // No audioUrl - use Twilio TTS
       `${baseUrl}/voice/conversation`,
       { department: state.selectedDepartment }
     );
