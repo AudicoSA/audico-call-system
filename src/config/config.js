@@ -22,14 +22,14 @@ export const config = {
   // ElevenLabs configuration
   elevenlabs: {
     apiKey: process.env.ELEVENLABS_API_KEY,
-    voiceId: process.env.ELEVENLABS_VOICE_ID, // Default voice
+    voiceId: process.env.RECEPTIONIST_VOICE_ID || process.env.ELEVENLABS_VOICE_ID, // Use receptionist voice as default
     model: 'eleven_multilingual_v2', // Supports multiple accents
     // Department-specific voices (optional - falls back to default if not set)
     departmentVoices: {
-      Sales: process.env.ELEVENLABS_VOICE_SALES || 'fPVZbr0RJBH9KL47pnxU',
-      Shipping: process.env.ELEVENLABS_VOICE_SHIPPING || 'YinfoGr2vb39a177NNfl',
-      Support: process.env.ELEVENLABS_VOICE_SUPPORT || 'YPtbPhafrxFTDAeaPP4w',
-      Accounts: process.env.ELEVENLABS_VOICE_ACCOUNTS || process.env.ELEVENLABS_VOICE_ID,
+      Sales: process.env.SALES_VOICE_ID || process.env.RECEPTIONIST_VOICE_ID || process.env.ELEVENLABS_VOICE_ID,
+      Shipping: process.env.SHIPPING_VOICE_ID || process.env.RECEPTIONIST_VOICE_ID || process.env.ELEVENLABS_VOICE_ID,
+      Support: process.env.SUPPORT_VOICE_ID || process.env.RECEPTIONIST_VOICE_ID || process.env.ELEVENLABS_VOICE_ID,
+      Accounts: process.env.ACCOUNTS_VOICE_ID || process.env.RECEPTIONIST_VOICE_ID || process.env.ELEVENLABS_VOICE_ID,
     },
   },
 
@@ -71,12 +71,14 @@ export const config = {
   },
 
   // Human Agent Configuration (for HITL transfers)
+  // IMPORTANT: Set these environment variables with real phone numbers
+  // If not set, transfers will fail (calls will disconnect)
   agents: {
-    sales: process.env.AGENT_SALES_NUMBER || '+27123456789',
-    shipping: process.env.AGENT_SHIPPING_NUMBER || '+27123456790',
-    support: process.env.AGENT_SUPPORT_NUMBER || '+27123456791',
-    accounts: process.env.AGENT_ACCOUNTS_NUMBER || '+27123456792',
-    operator: process.env.AGENT_OPERATOR_NUMBER || '+27123456793',
+    sales: process.env.AGENT_SALES_NUMBER || null,
+    shipping: process.env.AGENT_SHIPPING_NUMBER || null,
+    support: process.env.AGENT_SUPPORT_NUMBER || null,
+    accounts: process.env.AGENT_ACCOUNTS_NUMBER || null,
+    operator: process.env.AGENT_OPERATOR_NUMBER || null,
   },
 
   // Queue Configuration (for when agents are busy)

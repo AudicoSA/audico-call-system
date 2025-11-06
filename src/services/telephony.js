@@ -197,14 +197,37 @@ export class TelephonyService {
   createTransferResponse(agentNumber, department) {
     const twiml = new VoiceResponse();
 
-    twiml.say({
-      voice: 'Polly.Joanna',
-      language: 'en-ZA',
-    }, `Transferring you to our ${department} team. Please hold.`);
+    // Check if agent number is configured
+    if (!agentNumber || agentNumber === 'null') {
+      // No agent number configured - inform customer and offer voicemail
+      twiml.say({
+        voice: 'Polly.Joanna',
+        language: 'en-ZA',
+      }, `I apologize, but our ${department} team is not available at the moment. Please leave a message after the tone, and someone will call you back shortly.`);
 
-    twiml.dial({
-      callerId: this.phoneNumber,
-    }, agentNumber);
+      twiml.record({
+        maxLength: 120,
+        transcribe: true,
+        playBeep: true,
+      });
+
+      twiml.say({
+        voice: 'Polly.Joanna',
+        language: 'en-ZA',
+      }, 'Thank you for your message. We will contact you soon. Goodbye.');
+
+      twiml.hangup();
+    } else {
+      // Agent number is configured - attempt transfer
+      twiml.say({
+        voice: 'Polly.Joanna',
+        language: 'en-ZA',
+      }, `Transferring you to our ${department} team. Please hold.`);
+
+      twiml.dial({
+        callerId: this.phoneNumber,
+      }, agentNumber);
+    }
 
     return twiml.toString();
   }

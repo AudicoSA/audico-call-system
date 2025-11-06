@@ -325,10 +325,14 @@ export class IVRService {
       'speak to someone',
       'talk to someone',
       'transfer me',
+      'transfer to',
+      'transfer',
       'connect me',
       'live agent',
       'real agent',
       'customer service',
+      'speak with',
+      'talk with',
     ];
 
     return humanKeywords.some(keyword => lowerInput.includes(keyword));
