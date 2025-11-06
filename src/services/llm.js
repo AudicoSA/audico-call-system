@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { config } from '../config/config.js';
 import { productService } from './product.js';
+import { orderTrackingService } from './order-tracking.js';
 
 /**
  * LLM service for conversation handling
@@ -79,25 +80,120 @@ export class LLMService {
   buildSystemPrompt(context) {
     const { intent, callerInfo, department, productKnowledge } = context;
 
-    let prompt = `You are a friendly and professional South African call center agent for Audico.
-Your role is to assist customers with their inquiries in a warm, helpful manner.
-
-Guidelines:
-- Use South African English expressions naturally (e.g., "howzit", "lekker", "just now")
-- Be concise but friendly - customers are on the phone
-- Ask clarifying questions if needed
-- Collect necessary information: name, contact details, issue description
-- If you cannot resolve the issue, prepare to transfer to a human agent
-- Always confirm important details back to the customer
+    // Base prompt (shared across all departments)
+    const basePrompt = `You are a friendly and professional South African AI agent for Audico.
+Use South African English expressions naturally (e.g., "howzit", "lekker", "just now").
+Be concise but friendly - customers are on the phone.
+Always confirm important details back to the customer.
 
 Product Knowledge:
 - You have access to our complete product catalogue via the get_product_info tool
 - When customers ask about products, use the tool to look up accurate information
 - Provide specific details like price, availability, and features
-- Suggest alternatives if a product is out of stock
-- You can search by product name, SKU, or category`;
+- Suggest alternatives if a product is out of stock`;
 
-    if (department) {
+    // Department-specific prompts (specialized AI agents)
+    const departmentPrompts = {
+      'Sales': `\n\n🛍️ SALES AGENT:
+You are Audico's Sales AI agent. Your expertise is helping customers find and purchase products.
+
+Your capabilities:
+- Recommend products based on customer needs and budget
+- Explain product features, specifications, and benefits
+- Compare different models and brands
+- Provide pricing information and current promotions
+- Check stock availability
+- Process sales inquiries and prepare quotes
+- Upsell and cross-sell complementary products
+
+When a customer is ready to buy:
+- Collect: Name, phone number, email, delivery address
+- Confirm product details and total price
+- Explain delivery options and timeframes
+- Provide order summary and next steps`,
+
+      'Shipping': `\n\n📦 SHIPPING AGENT:
+You are Audico's Shipping & Logistics AI agent. Your expertise is order tracking and delivery.
+
+Your capabilities:
+- Track order status and delivery progress
+- Provide estimated delivery dates
+- Explain shipping methods and costs
+- Handle delivery address changes (before dispatch)
+- Resolve delivery issues and delays
+- Arrange re-delivery or collection
+- Process returns and exchanges
+
+When helping customers:
+- Ask for order number or email address
+- Use track_order tool to get real-time status
+- Explain current shipment location clearly
+- Set realistic delivery expectations
+- Offer solutions for any shipping problems`,
+
+      'Support': `\n\n🔧 TECHNICAL SUPPORT AGENT:
+You are Audico's Technical Support AI agent. Your expertise is troubleshooting and technical assistance.
+
+Your capabilities:
+- Diagnose technical problems with products
+- Provide step-by-step troubleshooting guides
+- Explain product setup and installation
+- Answer technical specifications questions
+- Handle warranty claims and repairs
+- Recommend solutions for technical issues
+- Guide customers through product features
+
+When troubleshooting:
+- Ask clarifying questions about the issue
+- Get product model number and purchase date
+- Guide through basic troubleshooting steps
+- Determine if product needs repair or replacement
+- Explain warranty coverage clearly
+- Create support tickets when needed`,
+
+      'Accounts': `\n\n💳 ACCOUNTS AGENT:
+You are Audico's Accounts & Billing AI agent. Your expertise is financial inquiries.
+
+Your capabilities:
+- Explain invoices and billing statements
+- Check payment status and history
+- Process payment inquiries
+- Handle account balance questions
+- Resolve billing disputes
+- Explain payment methods and terms
+- Update account information
+
+When handling financial matters:
+- Verify customer identity (name, account number, email)
+- Explain charges clearly and transparently
+- Provide payment options and instructions
+- Handle sensitive information professionally
+- Escalate fraud or security concerns to human immediately`,
+
+      'Operator': `\n\n📞 GENERAL ASSISTANT:
+You are Audico's General AI assistant. You can help with any inquiry.
+
+Your capabilities:
+- Route inquiries to appropriate topics
+- Provide general company information
+- Answer basic questions about products and services
+- Direct customers to the right department if needed
+- Handle general inquiries professionally
+
+If customer has a specific need, guide them:
+- Sales questions → Use product search tools
+- Order tracking → Ask for order number
+- Technical issues → Begin troubleshooting
+- Billing questions → Ask for account details`
+    };
+
+    // Build the final prompt
+    let prompt = basePrompt;
+
+    // Add department-specific section
+    if (department && departmentPrompts[department]) {
+      prompt += departmentPrompts[department];
+    } else if (department) {
       prompt += `\n\nCurrent department: ${department}`;
     }
 
@@ -112,6 +208,11 @@ Product Knowledge:
     if (productKnowledge) {
       prompt += `\n\nProduct Context: ${productKnowledge}`;
     }
+
+    // Important: AI should NOT auto-transfer to human
+    prompt += `\n\n⚠️ IMPORTANT: You are an AI agent. Handle ALL customer inquiries yourself.
+Only mention transferring to a human if the customer EXPLICITLY asks for one.
+You are capable and empowered to resolve any issue.`;
 
     return prompt;
   }
@@ -244,11 +345,13 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
   }
 
   /**
-   * Get product tool definitions for Claude tool calling
+   * Get tool definitions for Claude tool calling (department-specific)
+   * @param {string} department - Department name
    * @returns {Array} - Tool definitions
    */
-  getProductTools() {
-    return [
+  getTools(department = null) {
+    // Base product tools (available to all departments)
+    const productTools = [
       {
         name: 'get_product_info',
         description: 'Search for product information by name, SKU, or general description. Use this when customers ask about products, pricing, or availability.',
@@ -301,19 +404,67 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
         },
       },
     ];
+
+    // Shipping-specific tools (order tracking)
+    const shippingTools = [
+      {
+        name: 'track_order',
+        description: 'Track an order by order number or invoice number. Returns order status, tracking information, and delivery estimates.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            order_number: {
+              type: 'string',
+              description: 'Order number or invoice number to track',
+            },
+          },
+          required: ['order_number'],
+        },
+      },
+      {
+        name: 'find_orders_by_email',
+        description: 'Find all orders associated with a customer email address. Useful when customer does not have order number.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            email: {
+              type: 'string',
+              description: 'Customer email address',
+            },
+          },
+          required: ['email'],
+        },
+      },
+    ];
+
+    // Return department-specific tools
+    if (department === 'Shipping') {
+      return [...productTools, ...shippingTools];
+    }
+
+    // All other departments get product tools
+    return productTools;
   }
 
   /**
-   * Execute a product tool call
+   * Legacy method for backward compatibility
+   */
+  getProductTools() {
+    return this.getTools();
+  }
+
+  /**
+   * Execute a tool call (products, orders, etc.)
    * @param {string} toolName - Tool name
    * @param {object} parameters - Tool parameters
    * @returns {Promise<any>} - Tool result
    */
-  async executeProductTool(toolName, parameters) {
-    console.log('[LLM] Executing product tool:', toolName, parameters);
+  async executeTool(toolName, parameters) {
+    console.log('[LLM] Executing tool:', toolName, parameters);
 
     try {
       switch (toolName) {
+        // Product tools
         case 'get_product_info': {
           const { query, search_type = 'semantic' } = parameters;
 
@@ -347,6 +498,19 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
           return 'Recommended products:\n' + recommendations.map(p => productService.formatProductInfo(p)).join('\n\n');
         }
 
+        // Order tracking tools (Shipping department)
+        case 'track_order': {
+          const { order_number } = parameters;
+          const orderInfo = await orderTrackingService.trackOrder(order_number);
+          return orderTrackingService.formatOrderInfo(orderInfo);
+        }
+
+        case 'find_orders_by_email': {
+          const { email } = parameters;
+          const ordersInfo = await orderTrackingService.findOrdersByEmail(email);
+          return orderTrackingService.formatOrderList(ordersInfo);
+        }
+
         default:
           return 'Unknown tool';
       }
@@ -354,6 +518,13 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
       console.error('[LLM] Tool execution error:', error.message);
       return `Error executing tool: ${error.message}`;
     }
+  }
+
+  /**
+   * Legacy method for backward compatibility
+   */
+  async executeProductTool(toolName, parameters) {
+    return this.executeTool(toolName, parameters);
   }
 
   /**
@@ -381,13 +552,17 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
 
       console.log('[LLM] Generating response with tool support for:', userMessage);
 
+      // Get department-specific tools
+      const tools = this.getTools(context.department);
+      console.log(`[LLM] Using tools for department: ${context.department || 'General'} (${tools.length} tools available)`);
+
       // First call to Claude with tools
       const response = await this.anthropic.messages.create({
         model: config.anthropic.model,
         max_tokens: 1024,
         system: systemPrompt,
         messages: history,
-        tools: this.getProductTools(),
+        tools: tools,
       });
 
       // Check if Claude wants to use tools
@@ -398,7 +573,7 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
         const toolResults = [];
         for (const content of response.content) {
           if (content.type === 'tool_use') {
-            const result = await this.executeProductTool(content.name, content.input);
+            const result = await this.executeTool(content.name, content.input);
             toolResults.push({
               type: 'tool_result',
               tool_use_id: content.id,
@@ -425,7 +600,7 @@ inability to resolve the issue. Respond with only "YES" or "NO".`,
           max_tokens: 1024,
           system: systemPrompt,
           messages: history,
-          tools: this.getProductTools(),
+          tools: tools,
         });
 
         const assistantMessage = finalResponse.content.find(c => c.type === 'text')?.text || 'I apologize, I could not process that information.';

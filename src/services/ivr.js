@@ -246,6 +246,8 @@ export class IVRService {
 
   /**
    * Check if call should be escalated to human
+   * IMPORTANT: Only escalate when customer EXPLICITLY requests a human
+   * AI agents should handle ALL departments (Sales, Shipping, Support, Accounts)
    * @param {string} callSid - Call identifier
    * @param {string} lastInput - Customer's last speech input (optional)
    * @returns {Promise<boolean>}
@@ -253,7 +255,7 @@ export class IVRService {
   async shouldEscalate(callSid, lastInput = '') {
     const state = this.getCallState(callSid);
 
-    // Check if customer explicitly requested human agent
+    // ONLY escalate if customer explicitly requested human agent
     if (this.detectsHumanRequest(lastInput)) {
       console.log('[IVR] Escalating due to explicit human request');
       this.updateCallState(callSid, { escalationReason: 'customer_requested_human' });
@@ -266,41 +268,13 @@ export class IVRService {
       return true;
     }
 
-    // Escalation criteria
-    if (state.conversationTurns > 10) {
-      console.log('[IVR] Escalating due to long conversation');
-      this.updateCallState(callSid, { escalationReason: 'long_conversation' });
-      return true;
-    }
+    // DO NOT auto-escalate based on:
+    // - Long conversations (AI can handle them)
+    // - Negative sentiment (AI should try to resolve)
+    // - High urgency (AI can handle urgent issues)
+    // - Failed attempts (AI should keep trying)
 
-    if (state.sentiment === 'negative' && state.conversationTurns > 3) {
-      console.log('[IVR] Escalating due to negative sentiment');
-      this.updateCallState(callSid, { escalationReason: 'negative_sentiment' });
-      return true;
-    }
-
-    if (state.urgency === 'critical' || state.urgency === 'high') {
-      console.log('[IVR] Escalating due to urgency');
-      this.updateCallState(callSid, { escalationReason: 'high_urgency' });
-      return true;
-    }
-
-    // Check for repeated failed attempts
-    if (state.failedAttempts >= 3) {
-      console.log('[IVR] Escalating due to repeated failures');
-      this.updateCallState(callSid, { escalationReason: 'repeated_failures' });
-      return true;
-    }
-
-    // Use LLM to determine if transfer needed
-    const shouldTransfer = await llmService.shouldTransferToHuman(callSid);
-
-    if (shouldTransfer) {
-      console.log('[IVR] LLM recommends escalation');
-      this.updateCallState(callSid, { escalationReason: 'ai_recommended' });
-      return true;
-    }
-
+    // AI agents are designed to handle ALL scenarios unless customer explicitly wants human
     return false;
   }
 
