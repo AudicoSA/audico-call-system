@@ -12,7 +12,8 @@
       "Bash(git branch:*)",
       "Bash(git push:*)",
       "Bash(curl:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

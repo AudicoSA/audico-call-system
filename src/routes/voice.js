@@ -39,26 +39,8 @@ router.post('/incoming', async (req, res) => {
 
     const baseUrl = getBaseUrl(req);
 
-    // Try ElevenLabs with pre-cached greeting (instant playback)
-    const greetingText = config.recording.enabled
-      ? 'This call will be recorded for quality and training purposes. Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.'
-      : 'Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.';
-
-    const audioUrl = await prepareAudioUrl(
-      greetingText,
-      callSid,
-      'greeting.mp3',
-      baseUrl
-    );
-
-    if (audioUrl) {
-      // Use ElevenLabs audio (pre-cached, instant)
-      const twiml = telephonyService.createGreetingResponseWithAudio(baseUrl, audioUrl);
-      res.type('text/xml');
-      return res.send(twiml);
-    }
-
-    // Fallback to Twilio TTS if generation failed
+    // SIMPLE FIX: Skip pre-caching, use Twilio TTS with South African voice FOR NOW
+    // This ensures calls don't drop while we debug ElevenLabs integration
     const twiml = telephonyService.createGreetingResponse(baseUrl);
     res.type('text/xml');
     res.send(twiml);
