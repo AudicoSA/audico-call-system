@@ -36,13 +36,13 @@ export class TelephonyService {
       method: 'POST',
       timeout: 5,
       speechTimeout: 'auto',
-      language: 'en-ZA',
+      
     });
 
     // Fallback if no input - use Twilio TTS
     twiml.say({
       voice: 'Polly.Ayanda',
-      language: 'en-ZA',
+      
     }, 'I did not hear anything. Please call back when you are ready.');
 
     twiml.hangup();
@@ -61,15 +61,13 @@ export class TelephonyService {
     // Play consent message if recording is enabled
     if (config.recording.enabled) {
       twiml.say({
-        voice: 'Polly.Ayanda',  // South African female voice
-        language: 'en-ZA',
+        voice: 'Polly.Ayanda',  // South African female voice (Polly voices don't need language parameter)
       }, config.recording.consentMessage);
     }
 
     // Greeting with menu option
     twiml.say({
-      voice: 'Polly.Ayanda',  // South African female voice
-      language: 'en-ZA',
+      voice: 'Polly.Ayanda',  // South African female voice (Polly voices don't need language parameter)
     }, 'Welcome to Audico. How may I assist you today? You may also say menu to hear our department options.');
 
     // Gather speech input
@@ -79,13 +77,12 @@ export class TelephonyService {
       method: 'POST',
       timeout: 5,
       speechTimeout: 'auto',
-      language: 'en-ZA',
+      language: 'en-US',  // Use en-US for speech recognition (Google STT compatible)
     });
 
     // Fallback if no input
     twiml.say({
       voice: 'Polly.Ayanda',
-      language: 'en-ZA',
     }, 'I did not hear anything. Please call back when you are ready.');
 
     twiml.hangup();
@@ -133,7 +130,7 @@ export class TelephonyService {
 
     twiml.say({
       voice: 'Polly.Ayanda',
-      language: 'en-ZA',
+      
     }, menuText);
 
     twiml.gather({
@@ -169,7 +166,7 @@ export class TelephonyService {
       // Note: For ElevenLabs voices, audio should be pre-generated and passed as audioUrl
       twiml.say({
         voice: 'Polly.Ayanda',
-        language: 'en-ZA',
+        
       }, text);
     }
 
@@ -181,7 +178,7 @@ export class TelephonyService {
         method: 'POST',
         timeout: 5,
         speechTimeout: 'auto',
-        language: 'en-ZA',
+        
       });
     }
 
@@ -202,7 +199,7 @@ export class TelephonyService {
       // No agent number configured - inform customer and offer voicemail
       twiml.say({
         voice: 'Polly.Ayanda',
-        language: 'en-ZA',
+        
       }, `I apologize, but our ${department} team is not available at the moment. Please leave a message after the tone, and someone will call you back shortly.`);
 
       twiml.record({
@@ -213,7 +210,7 @@ export class TelephonyService {
 
       twiml.say({
         voice: 'Polly.Ayanda',
-        language: 'en-ZA',
+        
       }, 'Thank you for your message. We will contact you soon. Goodbye.');
 
       twiml.hangup();
@@ -221,7 +218,7 @@ export class TelephonyService {
       // Agent number is configured - attempt transfer
       twiml.say({
         voice: 'Polly.Ayanda',
-        language: 'en-ZA',
+        
       }, `Transferring you to our ${department} team. Please hold.`);
 
       twiml.dial({
@@ -242,7 +239,7 @@ export class TelephonyService {
 
     twiml.say({
       voice: 'Polly.Ayanda',
-      language: 'en-ZA',
+      
     }, 'Please leave a message after the tone. Press any key when you are finished.');
 
     twiml.record({
@@ -340,7 +337,7 @@ export class TelephonyService {
 
     twiml.say({
       voice: 'Polly.Ayanda',
-      language: 'en-ZA',
+      
     }, message);
 
     twiml.hangup();
