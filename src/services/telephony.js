@@ -77,7 +77,7 @@ export class TelephonyService {
       method: 'POST',
       timeout: 5,
       speechTimeout: 'auto',
-      language: 'en-US',  // Use en-US for speech recognition (Google STT compatible)
+      // No language parameter - let Twilio auto-detect
     });
 
     // Fallback if no input
