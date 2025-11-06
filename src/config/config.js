@@ -36,7 +36,7 @@ export const config = {
   // Anthropic Claude configuration
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY,
-    model: 'claude-3-5-sonnet-20241022',
+    model: 'claude-3-5-sonnet-20240620', // Updated to working model version
   },
 
   // CRM configuration
