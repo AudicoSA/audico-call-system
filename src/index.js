@@ -7,7 +7,7 @@
 
 import express from 'express';
 import axios from 'axios';
-import { Anthropic } from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
@@ -24,7 +24,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -567,148 +567,156 @@ Help with billing and payment questions.
 Keep responses SHORT (2-3 sentences).`
   };
 
-  // Define tools based on agent type
+  // Define tools based on agent type (OpenAI format)
   let tools = undefined;
 
   if (agentType === 'sales') {
     tools = [
       {
-        name: 'search_products',
-        description: 'Search Audico product catalog in real-time. Use this EVERY TIME a customer asks about a product. Search by brand name, model number, product type, or SKU.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Search query - brand, model, product type, or SKU (e.g., "Denon AVR-X1800H", "wireless headphones", "JBL")'
+        type: 'function',
+        function: {
+          name: 'search_products',
+          description: 'Search Audico product catalog in real-time. Use this EVERY TIME a customer asks about a product. Search by brand name, model number, product type, or SKU.',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search query - brand, model, product type, or SKU (e.g., "Denon AVR-X1800H", "wireless headphones", "JBL")'
+              },
+              limit: {
+                type: 'integer',
+                description: 'Maximum number of results (default 10)',
+                default: 10
+              }
             },
-            limit: {
-              type: 'integer',
-              description: 'Maximum number of results (default 10)',
-              default: 10
-            }
-          },
-          required: ['query']
+            required: ['query']
+          }
         }
       }
     ];
   } else if (agentType === 'shipping') {
     tools = [
       {
-        name: 'track_order',
-        description: 'Look up an order in OpenCart database by order ID. Returns REAL order information including products, date, status, and tracking number. DO NOT make up information - only use what this tool returns.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            order_id: {
-              type: 'string',
-              description: 'Order ID number (e.g., "28630", "28645")'
-            }
-          },
-          required: ['order_id']
+        type: 'function',
+        function: {
+          name: 'track_order',
+          description: 'Look up an order in OpenCart database by order ID. Returns REAL order information including products, date, status, and tracking number. DO NOT make up information - only use what this tool returns.',
+          parameters: {
+            type: 'object',
+            properties: {
+              order_id: {
+                type: 'string',
+                description: 'Order ID number (e.g., "28630", "28645")'
+              }
+            },
+            required: ['order_id']
+          }
         }
       }
     ];
   }
 
   try {
-    let response = await anthropic.messages.create({
-      model: 'claude-3-opus-20240229',
+    // Prepare messages with system prompt
+    const messages = [
+      { role: 'system', content: systemPrompts[agentType] || systemPrompts.receptionist },
+      ...history
+    ];
+
+    let response = await openai.chat.completions.create({
+      model: 'gpt-4o',
       max_tokens: 1024,
-      system: systemPrompts[agentType] || systemPrompts.receptionist,
-      messages: history,
+      messages: messages,
       tools: tools,
+      tool_choice: tools ? 'auto' : undefined,
     });
 
-    // Handle tool use (product search)
-    if (response.stop_reason === 'tool_use') {
-      // Check if there's any text response alongside the tool call
-      const textBlocks = response.content.filter(block => block.type === 'text');
-      const hasAcknowledgment = textBlocks.length > 0 && textBlocks.some(b => b.text.length > 10);
+    const message = response.choices[0].message;
 
-      // If no acknowledgment text, force one
-      if (!hasAcknowledgment) {
-        console.log('[FORCING ACKNOWLEDGMENT] AI used tool without speaking first');
-        // Return immediate acknowledgment, don't use tool yet
-        return "Let me check that for you - give me just a moment...";
-      }
+    // Handle tool calls (OpenAI format)
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      console.log(`[TOOL CALLS] ${message.tool_calls.length} tool(s) called`);
 
-      const assistantMessage = response.content;
-      history.push({ role: 'assistant', content: assistantMessage });
+      // Add assistant message with tool calls to history
+      history.push(message);
 
-      const toolResults = [];
+      // Execute each tool call
+      for (const toolCall of message.tool_calls) {
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments);
 
-      for (const block of response.content) {
-        if (block.type === 'tool_use') {
-          console.log(`[TOOL CALL] ${block.name} with:`, block.input);
+        console.log(`[TOOL CALL] ${functionName} with:`, functionArgs);
 
-          let toolResult;
-          if (block.name === 'search_products') {
-            const products = await searchProducts(block.input.query, block.input.limit || 10);
-            toolResult = products.length > 0 ? products : [{ message: 'No products found matching that search' }];
-          } else if (block.name === 'track_order') {
-            const orderId = block.input.order_id;
-            const order = await lookupOrder(orderId);
+        let toolResult;
 
-            if (!order) {
-              toolResult = { error: `Order ${orderId} not found in our system` };
-            } else {
-              const products = await getOrderProducts(orderId);
-              const history = await getOrderHistory(orderId);
+        if (functionName === 'search_products') {
+          const products = await searchProducts(functionArgs.query, functionArgs.limit || 10);
+          toolResult = products.length > 0 ? products : [{ message: 'No products found matching that search' }];
+        } else if (functionName === 'track_order') {
+          const orderId = functionArgs.order_id;
+          const order = await lookupOrder(orderId);
 
-              // Check ShipLogic tracking database first
-              const [trackingRows] = await mysqlPool.execute(
-                `SELECT tcg_waybill, shiplogic_reference, status, status_message, last_updated_at
-                 FROM oc_order_shiplogic_tracking
-                 WHERE order_id = ?
-                 ORDER BY last_updated_at DESC
-                 LIMIT 1`,
-                [parseInt(orderId)]
-              );
+          if (!order) {
+            toolResult = { error: `Order ${orderId} not found in our system` };
+          } else {
+            const products = await getOrderProducts(orderId);
+            const orderHistory = await getOrderHistory(orderId);
 
-              // If we have ShipLogic tracking, add it to the response
-              if (trackingRows.length > 0) {
-                const tracking = trackingRows[0];
-                console.log(`✅ [TRACKING] Found ShipLogic tracking for order ${orderId}: ${tracking.tcg_waybill || tracking.shiplogic_reference}`);
+            // Check ShipLogic tracking database first
+            const [trackingRows] = await mysqlPool.execute(
+              `SELECT tcg_waybill, shiplogic_reference, status, status_message, last_updated_at
+               FROM oc_order_shiplogic_tracking
+               WHERE order_id = ?
+               ORDER BY last_updated_at DESC
+               LIMIT 1`,
+              [parseInt(orderId)]
+            );
 
-                // Add tracking to history for the formatter
-                if (tracking.tcg_waybill) {
-                  history.unshift({
-                    comment: `Tracking: ${tracking.tcg_waybill} - Status: ${tracking.status || 'pending'}`,
-                    date_added: tracking.last_updated_at
-                  });
-                }
+            // If we have ShipLogic tracking, add it to the response
+            if (trackingRows.length > 0) {
+              const tracking = trackingRows[0];
+              console.log(`✅ [TRACKING] Found ShipLogic tracking for order ${orderId}: ${tracking.tcg_waybill || tracking.shiplogic_reference}`);
+
+              // Add tracking to history for the formatter
+              if (tracking.tcg_waybill) {
+                orderHistory.unshift({
+                  comment: `Tracking: ${tracking.tcg_waybill} - Status: ${tracking.status || 'pending'}`,
+                  date_added: tracking.last_updated_at
+                });
               }
-
-              const response = formatShippingResponse(order, products, history);
-              toolResult = response;
             }
-          }
 
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: JSON.stringify(toolResult, null, 2)
-          });
+            const shippingResponse = formatShippingResponse(order, products, orderHistory);
+            toolResult = shippingResponse;
+          }
         }
+
+        // Add tool result to history
+        history.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: functionName,
+          content: JSON.stringify(toolResult, null, 2)
+        });
       }
 
-      // Send tool results back to Claude
-      history.push({ role: 'user', content: toolResults });
+      // Get final response with tool results
+      const finalMessages = [
+        { role: 'system', content: systemPrompts[agentType] || systemPrompts.receptionist },
+        ...history
+      ];
 
-      response = await anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
+      response = await openai.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 1024,
-        system: systemPrompts[agentType] || systemPrompts.receptionist,
-        messages: history,
+        messages: finalMessages,
         tools: tools,
+        tool_choice: 'none', // Don't call tools again
       });
     }
 
-    const aiMessage = response.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join(' ');
+    const aiMessage = response.choices[0].message.content;
 
     console.log(`[AI-${agentType}] Response:`, aiMessage.substring(0, 100) + '...');
 
