@@ -331,13 +331,28 @@ async function generateSpeech(text, filename, voiceId) {
 async function searchProducts(query, limit = 10) {
   console.log(`[DB SEARCH] Query: "${query}"`);
 
+  // Extract key search terms (remove filler words like "channel", "for", etc.)
+  const searchTerms = query
+    .toLowerCase()
+    .replace(/\b(channel|for|the|and|with|looking)\b/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(term => term.length > 1);
+
+  console.log(`[DB SEARCH] Search terms:`, searchTerms);
+
+  // Build flexible OR query - search for ANY of the terms in ANY field
+  const orConditions = searchTerms.flatMap(term =>
+    [`product_name.ilike.%${term}%`, `brand.ilike.%${term}%`, `category_name.ilike.%${term}%`, `sku.ilike.%${term}%`]
+  ).join(',');
+
   const { data, error } = await supabase
     .from('products')
     .select('product_name, sku, brand, category_name, selling_price, total_stock')
     .eq('active', true)
     .gt('total_stock', 0)
-    .or(`product_name.ilike.%${query}%,brand.ilike.%${query}%,sku.ilike.%${query}%`)
-    .limit(limit);
+    .or(orConditions)
+    .limit(limit * 2); // Get more results for better matches
 
   if (error) {
     console.error('[DB SEARCH] Error:', error);
@@ -345,7 +360,7 @@ async function searchProducts(query, limit = 10) {
   }
 
   console.log(`[DB SEARCH] Found ${data?.length || 0} results`);
-  return data || [];
+  return data?.slice(0, limit) || [];
 }
 
 /** Look up OpenCart order by ID */
@@ -927,8 +942,9 @@ app.post('/voice/conversation', async (req, res) => {
     return res.type('text/xml').send(twiml);
   }
 
-  // Check for goodbye
-  if (/goodbye|bye|thank you|thanks/i.test(speechResult)) {
+  // Check for goodbye - ONLY hang up on clear ending phrases
+  // Don't hang up on polite "thanks" in the middle of conversation!
+  if (/^(goodbye|bye\s*bye|i'm\s*done|that's\s*all|end\s*call)$/i.test(speechResult.trim())) {
     const audioFile = await generateSpeech(aiResponse, `${callSid}-goodbye.mp3`, AGENT_VOICES[state.agent]);
 
     const baseUrl = getBaseUrl(req);
