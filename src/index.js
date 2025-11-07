@@ -813,6 +813,7 @@ Keep responses SHORT (2-3 sentences).`
             }
 
             const shippingResponse = formatShippingResponse(order, products, orderHistory);
+            console.log(`[FORMATTED RESPONSE] ${JSON.stringify(shippingResponse, null, 2)}`);
             toolResult = shippingResponse;
           }
         }
@@ -843,7 +844,7 @@ Keep responses SHORT (2-3 sentences).`
 
     const aiMessage = response.choices[0].message.content;
 
-    console.log(`[AI-${agentType}] Response:`, aiMessage.substring(0, 100) + '...');
+    console.log(`[AI-${agentType}] Response:`, aiMessage);
 
     history.push({ role: 'assistant', content: aiMessage });
 
