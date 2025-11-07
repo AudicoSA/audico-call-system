@@ -724,7 +724,7 @@ Keep responses SHORT (2-3 sentences).`
     return aiMessage;
   } catch (error) {
     console.error(`[AI-${agentType}] Error:`, error.message);
-    return 'I apologize, I need to transfer you to a specialist.';
+    return 'Sorry, I did not catch that. Could you please repeat?';
   }
 }
 
@@ -742,11 +742,11 @@ function createTwiML(message, audioFile, nextUrl, req) {
   if (audioFile) {
     twiml += `<Play>${baseUrl}/audio/${audioFile}</Play>`;
   } else {
-    twiml += `<Say voice="Polly.Joanna" language="en-ZA">${message}</Say>`;
+    twiml += `<Say voice="Polly.Ayanda" language="en-ZA">${message}</Say>`;
   }
 
   twiml += `<Gather input="speech" action="${baseUrl}${nextUrl}" language="en-ZA" speechTimeout="auto">`;
-  twiml += '<Say voice="Polly.Joanna" language="en-ZA"></Say>';
+  twiml += '<Say voice="Polly.Ayanda" language="en-ZA"></Say>';
   twiml += '</Gather>';
   twiml += '</Response>';
 
@@ -903,7 +903,7 @@ app.post('/voice/conversation', async (req, res) => {
     }
 
     twiml += `<Gather input="speech" action="${baseUrl}/voice/conversation" language="en-ZA" speechTimeout="auto">`;
-    twiml += '<Say voice="Polly.Joanna" language="en-ZA"></Say>';
+    twiml += '<Say voice="Polly.Ayanda" language="en-ZA"></Say>';
     twiml += '</Gather>';
     twiml += '</Response>';
 
