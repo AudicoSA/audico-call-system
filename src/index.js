@@ -638,6 +638,15 @@ Keep responses SHORT (2-3 sentences).`
     if (message.tool_calls && message.tool_calls.length > 0) {
       console.log(`[TOOL CALLS] ${message.tool_calls.length} tool(s) called`);
 
+      // Check if GPT spoke before calling the tool
+      const hasSpokenResponse = message.content && message.content.trim().length > 0;
+
+      // If GPT didn't speak first, force an immediate acknowledgment
+      if (!hasSpokenResponse && agentType === 'sales') {
+        console.log('[FORCING ACKNOWLEDGMENT] AI called tool without speaking first');
+        return "Sure, let me check that for you...";
+      }
+
       // Add assistant message with tool calls to history
       history.push(message);
 
