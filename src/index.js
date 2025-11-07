@@ -331,19 +331,103 @@ async function generateSpeech(text, filename, voiceId) {
 async function searchProducts(query, limit = 10) {
   console.log(`[DB SEARCH] Query: "${query}"`);
 
-  // Extract key search terms (remove filler words like "channel", "for", etc.)
+  const queryLower = query.toLowerCase();
+
+  // Strategy 1: Try exact model number match first (e.g., "AVR-X580BT")
+  const modelMatch = query.match(/([A-Z]{2,}[-]?[A-Z0-9]{3,})/i);
+  if (modelMatch) {
+    const modelNumber = modelMatch[1];
+    console.log(`[DB SEARCH] Trying exact model: "${modelNumber}"`);
+
+    const { data: exactMatches } = await supabase
+      .from('products')
+      .select('product_name, sku, brand, category_name, selling_price, total_stock')
+      .eq('active', true)
+      .gt('total_stock', 0)
+      .or(`product_name.ilike.%${modelNumber}%,sku.ilike.%${modelNumber}%`)
+      .limit(limit);
+
+    if (exactMatches && exactMatches.length > 0) {
+      console.log(`[DB SEARCH] Found ${exactMatches.length} exact model matches`);
+      return exactMatches;
+    }
+  }
+
+  // Strategy 2: Category-specific search for "receiver", "amplifier", etc.
+  if (queryLower.includes('receiver') || queryLower.includes('amplifier')) {
+    console.log(`[DB SEARCH] Searching AV receivers/amplifiers`);
+
+    // Extract brand if mentioned
+    const brands = ['denon', 'yamaha', 'marantz', 'onkyo', 'sony'];
+    const mentionedBrand = brands.find(brand => queryLower.includes(brand));
+
+    let categoryQuery = supabase
+      .from('products')
+      .select('product_name, sku, brand, category_name, selling_price, total_stock')
+      .eq('active', true)
+      .gt('total_stock', 0)
+      .or('category_name.ilike.%AV Receivers%,category_name.ilike.%Amplifiers%,product_name.ilike.%receiver%,product_name.ilike.%amplifier%');
+
+    if (mentionedBrand) {
+      categoryQuery = categoryQuery.ilike('brand', mentionedBrand);
+    }
+
+    // Filter OUT stereo-only products
+    const { data: categoryResults } = await categoryQuery.limit(limit * 2);
+
+    if (categoryResults && categoryResults.length > 0) {
+      // Prioritize multi-channel over stereo
+      const filtered = categoryResults
+        .filter(p => {
+          const name = p.product_name.toLowerCase();
+          // Keep if mentions channels (5.2, 7.2, etc) OR explicitly says "av"
+          // Remove if it's PMA (stereo integrated amp) or says "stereo" only
+          if (name.includes('pma-') || name.includes('pma900')) return false;
+          if (name.includes('stereo') && !name.includes('channel')) return false;
+          return name.includes('avr') || name.includes('channel') || name.includes('av receiver');
+        })
+        .slice(0, limit);
+
+      console.log(`[DB SEARCH] Found ${filtered.length} AV receivers (filtered out stereo)`);
+      if (filtered.length > 0) return filtered;
+    }
+  }
+
+  // Strategy 3: Brand + product type search
+  const brands = ['denon', 'yamaha', 'marantz', 'onkyo', 'sony', 'jbl', 'klipsch', 'bowers', 'polk'];
+  const mentionedBrand = brands.find(brand => queryLower.includes(brand));
+
+  if (mentionedBrand) {
+    console.log(`[DB SEARCH] Brand-specific search: ${mentionedBrand}`);
+
+    const { data: brandResults } = await supabase
+      .from('products')
+      .select('product_name, sku, brand, category_name, selling_price, total_stock')
+      .eq('active', true)
+      .gt('total_stock', 0)
+      .ilike('brand', mentionedBrand)
+      .limit(limit);
+
+    if (brandResults && brandResults.length > 0) {
+      console.log(`[DB SEARCH] Found ${brandResults.length} products from ${mentionedBrand}`);
+      return brandResults;
+    }
+  }
+
+  // Strategy 4: General search (fallback)
+  console.log(`[DB SEARCH] General search fallback`);
+
   const searchTerms = query
     .toLowerCase()
-    .replace(/\b(channel|for|the|and|with|looking)\b/g, '')
+    .replace(/\b(channel|for|the|and|with|looking|need|want)\b/g, '')
     .trim()
     .split(/\s+/)
-    .filter(term => term.length > 1);
+    .filter(term => term.length > 2);
 
-  console.log(`[DB SEARCH] Search terms:`, searchTerms);
+  if (searchTerms.length === 0) return [];
 
-  // Build flexible OR query - search for ANY of the terms in ANY field
   const orConditions = searchTerms.flatMap(term =>
-    [`product_name.ilike.%${term}%`, `brand.ilike.%${term}%`, `category_name.ilike.%${term}%`, `sku.ilike.%${term}%`]
+    [`product_name.ilike.%${term}%`, `brand.ilike.%${term}%`, `category_name.ilike.%${term}%`]
   ).join(',');
 
   const { data, error } = await supabase
@@ -352,7 +436,7 @@ async function searchProducts(query, limit = 10) {
     .eq('active', true)
     .gt('total_stock', 0)
     .or(orConditions)
-    .limit(limit * 2); // Get more results for better matches
+    .limit(limit);
 
   if (error) {
     console.error('[DB SEARCH] Error:', error);
@@ -360,7 +444,7 @@ async function searchProducts(query, limit = 10) {
   }
 
   console.log(`[DB SEARCH] Found ${data?.length || 0} results`);
-  return data?.slice(0, limit) || [];
+  return data || [];
 }
 
 /** Look up OpenCart order by ID */
@@ -532,30 +616,29 @@ Keep responses VERY SHORT (1 sentence).
 
 When you know the department, say: "Let me connect you to our [department] team."`,
 
-    sales: `You are a sales specialist for Audico, a South African electronics retailer.
+    sales: `You're a helpful sales agent at Audico. Be friendly, natural, and human-like.
 
-We have 15,000+ products in stock. You have access to REAL-TIME product search via the search_products tool.
+CONVERSATION STYLE:
+- Talk like a real person, not a robot
+- Use short, casual sentences
+- Say "let me check" or "give me a sec" before searching
+- Be enthusiastic but not pushy
+- If you don't find something, admit it honestly
 
-Your job:
-- Help customers find products using the search_products tool
-- Provide accurate pricing and stock information from search results
-- Answer questions enthusiastically
-- Close sales
+CRITICAL RULES:
+1. ALWAYS search before answering product questions
+2. Write prices in words: "ten thousand one hundred and ninety rand" NOT "R10190"
+3. Only recommend products YOU FOUND in the search results
+4. If search returns nothing, say: "I'm not finding that. Would you like me to transfer you to a specialist?"
+5. DON'T make up product details - stick to what the search shows
 
-CRITICAL PRONUNCIATION RULES:
-- ALWAYS write prices as "X thousand Y hundred rand" or "X rand" (NOT "R123" or "ZAR")
-- Example: 8990 = "eight thousand nine hundred and ninety rand"
-- Example: 164290 = "one hundred and sixty-four thousand two hundred and ninety rand"
-- Example: 10190 = "ten thousand one hundred and ninety rand"
+WHEN TO TRANSFER TO HUMAN:
+- Customer asks complex technical questions
+- You can't find what they need after 2 searches
+- Customer seems frustrated
+- Say: "Let me connect you with one of our specialists who can help better"
 
-RESPONSE STYLE:
-- When customer asks for a product, ALWAYS use search_products tool first
-- IMMEDIATELY say: "Let me check that for you..." then use the tool
-- Keep responses SHORT (2-3 sentences max)
-- Be natural and conversational
-- Use search results as your source of truth!
-
-If search returns no results, suggest they speak with a specialist or ask for similar products.`,
+Keep it SHORT and NATURAL!`,
 
     shipping: `You are a shipping specialist for Audico, a South African electronics retailer.
 
