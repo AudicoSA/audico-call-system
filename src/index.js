@@ -503,6 +503,14 @@ function extractTrackingNumber(history) {
   for (const entry of history) {
     if (!entry.comment) continue;
 
+    // Check for TCG waybill (most common format in your system)
+    const tcgMatch = entry.comment.match(/TCG\d+/i);
+    if (tcgMatch) return tcgMatch[0];
+
+    // Check for "Tracking:" prefix
+    const trackingMatch = entry.comment.match(/Tracking:\s*([A-Z0-9]+)/i);
+    if (trackingMatch) return trackingMatch[1];
+
     // Check for tracking URLs
     const urlMatch = entry.comment.match(/https?:\/\/[^\s]+/);
     if (urlMatch) return urlMatch[0];
