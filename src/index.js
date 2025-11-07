@@ -542,20 +542,19 @@ function formatShippingResponse(order, products, history) {
     month: 'long',
     day: 'numeric',
   });
-  const total = `R${parseFloat(order.total || 0).toFixed(2)}`;
 
   const trackingInfo = extractTrackingNumber(history);
   const needsUpdate = needsShippingUpdate(order, history);
 
   let response = 'Let me check that for you. ';
 
-  // Confirm product
+  // Confirm product (NO PRICES - wife might be calling!)
   if (products && products.length > 0) {
     const productNames = products.map(p => `${p.name} quantity ${p.quantity}`).join(', ');
     response += `I can confirm your order for ${productNames}. `;
   }
 
-  response += `This order was placed on ${dateStr} with a total of ${total}. `;
+  response += `This order was placed on ${dateStr}. `;
 
   // Status
   const statusMap = {
@@ -573,18 +572,29 @@ function formatShippingResponse(order, products, history) {
   const statusName = statusMap[order.order_status_id] || 'being processed';
   response += `The current status is ${statusName}. `;
 
-  // Tracking
+  // TRACKING - Make this prominent!
   if (trackingInfo) {
-    if (trackingInfo.startsWith('http')) {
-      // Extract tracking number from URL (after ref= or ref:)
+    // Check if it's a TCG waybill number
+    if (trackingInfo.includes('TCG') || /^[A-Z0-9]{8,}$/i.test(trackingInfo)) {
+      response += `Your parcel has been shipped with The Courier Guy. Your tracking number is ${trackingInfo}. `;
+      response += `You can track it at tracking dot the courier guy dot co dot za. `;
+    } else if (trackingInfo.startsWith('http')) {
+      // Extract tracking number from URL
       const refMatch = trackingInfo.match(/ref[=:]([A-Z0-9\-]+)/i);
       if (refMatch) {
-        response += `Shipped with The Courier Guy. Tracking ${refMatch[1]}. `;
+        response += `Your parcel has been shipped. Tracking number is ${refMatch[1]}. `;
       } else {
-        response += `Your tracking information is available at: ${trackingInfo}. `;
+        response += `Your tracking link is available. `;
       }
     } else {
-      response += `Tracking reference ${trackingInfo}. `;
+      response += `Your tracking reference is ${trackingInfo}. `;
+    }
+  } else {
+    // No tracking yet
+    if (order.order_status_id === 3 || order.order_status_id === 18) {
+      response += `The parcel has been shipped but the tracking number is still being updated. You should receive it within the next hour. `;
+    } else {
+      response += `No tracking information is available yet. `;
     }
   }
 
