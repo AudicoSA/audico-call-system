@@ -613,7 +613,7 @@ Keep responses SHORT (2-3 sentences).`
 
   try {
     let response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-3-5-sonnet-20240620',
       max_tokens: 1024,
       system: systemPrompts[agentType] || systemPrompts.receptionist,
       messages: history,
@@ -697,7 +697,7 @@ Keep responses SHORT (2-3 sentences).`
       history.push({ role: 'user', content: toolResults });
 
       response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-3-5-sonnet-20240620',
         max_tokens: 1024,
         system: systemPrompts[agentType] || systemPrompts.receptionist,
         messages: history,
