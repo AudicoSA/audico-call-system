@@ -557,9 +557,23 @@ function formatShippingResponse(order, products, history) {
   let response = 'Let me check that for you. ';
 
   // Confirm product (NO PRICES - wife might be calling!)
+  // Keep it SHORT - just brand and main product type
   if (products && products.length > 0) {
-    const productNames = products.map(p => `${p.name} quantity ${p.quantity}`).join(', ');
-    response += `I can confirm your order for ${productNames}. `;
+    const shortNames = products.map(p => {
+      // Extract brand and shorten the name
+      const name = p.name;
+      const words = name.split(/[\s\-_]+/);
+
+      // Take first 2-3 words max (usually brand + model)
+      const shortName = words.slice(0, 3).join(' ');
+
+      if (p.quantity > 1) {
+        return `${shortName}, quantity ${p.quantity}`;
+      }
+      return shortName;
+    }).join(', ');
+
+    response += `I can confirm your order for ${shortNames}. `;
   }
 
   response += `This order was placed on ${dateStr}. `;
