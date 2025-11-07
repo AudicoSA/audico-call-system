@@ -592,9 +592,9 @@ function formatShippingResponse(order, products, history) {
   } else {
     // No tracking yet
     if (order.order_status_id === 3 || order.order_status_id === 18) {
-      response += `The parcel has been shipped but the tracking number is still being updated. You should receive it within the next hour. `;
+      response += `The parcel has been shipped but the tracking number hasn't been updated in our system yet. Please check back in a few hours or contact us if you need immediate assistance. `;
     } else {
-      response += `No tracking information is available yet. `;
+      response += `Your order is being prepared and tracking information will be available once it ships. `;
     }
   }
 
